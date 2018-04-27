@@ -39,7 +39,11 @@ def DemoEngine(object):
             else:
                 result = u'中性'
                 
-            self.writeLog(u'最新Tick的成交价为%s，交易方向：%s', last, result)
+            self.writeLog(u'%s最新Tick的成交价为%s (%s, %s)，交易方向： %s', %(tick,
+                                                                          last,
+                                                                          self.priceDict['bid'],
+                                                                          self.priceDict['ask'],
+                                                                          result))
         
         self.priceDict['bid'] = tick.bidPrice1
         self.priceDict['ask'] = tick.askPrice1
