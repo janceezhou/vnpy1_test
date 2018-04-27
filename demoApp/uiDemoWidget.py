@@ -27,7 +27,7 @@ class DemoWidget(QTWidget.Qwidget):
         self.button = QtWidget.QPushButton(u'订阅行情')
         self.button.clicked.connect(self.demoEngine.subscribeData)
         
-        self.logMonitor = QtZidgets.QTextEdit()
+        self.logMonitor = QtWidgets.QTextEdit()
         self.logMonitor.setReadOnly(True)
         
         hbox = QtWidgets.QHBoxLayout()
