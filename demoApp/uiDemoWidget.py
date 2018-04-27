@@ -42,7 +42,7 @@ class DemoWidget(QTWidget.Qwidget):
     
     def registerEvent(self):
         self.signalLog.connect(self.processLogEvent)
-        self.eventEngine.register(EVENT_DEMO_LOG, self.signalLog.emit())
+        self.eventEngine.register(EVENT_DEMO_LOG, self.signalLog.emit)
         
     
     def processLogEvent(self, event):
