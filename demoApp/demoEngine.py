@@ -6,7 +6,7 @@ from vnpy.trader.vtObject import VtSubscribeReq
 
 EVENT_DEMO_LOG = 'eDemoLog'
 
-def DemoEngine(object):
+class DemoEngine(object):
     
     def __init__(self, mainEngine, eventEngine):
         self.mainEngine = mainEngine
