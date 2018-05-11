@@ -7,12 +7,12 @@ from .demoEngine import EVENT_DEMO_LOG
 from vnpy.event import Event
 from vnpy.trader.uiQt import QtCore, QtWidgets
 
-class DemoWidget(QTWidget.Qwidget):
+class DemoWidget(QtWidgets.Qwidget):
     
     signalLog = QtCore.Signal(type(Event()))
     
-    def __init__(self, demoEngine, eventEngine, parent=NONE):
-        super(DemoWidget, self).__init__(NONE)
+    def __init__(self, demoEngine, eventEngine, parent=None):
+        super(DemoWidget, self).__init__(None)
         
         self.demoEngine = demoEngine
         self.eventEngine = eventEngine
@@ -24,7 +24,7 @@ class DemoWidget(QTWidget.Qwidget):
     def initUi(self):
         self.setWindowTitle('DemoApp')
         
-        self.button = QtWidget.QPushButton(u'订阅行情')
+        self.button = QtWidgets.QPushButton(u'订阅行情')
         self.button.clicked.connect(self.demoEngine.subscribeData)
         
         self.logMonitor = QtWidgets.QTextEdit()
