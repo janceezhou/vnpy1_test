@@ -17,7 +17,7 @@ def loadBTCCsv(fileName, dbName, symbol):
         tick.vtSymbol = symbol
         tick.symbol = symbol
 
-        tick.datetime = datetime.strptime(datetime.fromtimestamp(int(d[0])), '%Y-%m-%d %H:%M:%S')
+        tick.datetime = datetime.strptime(datetime.fromtimestamp(int(d[0])).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
         tick.date = tick.datetime.date().strftime('%Y%m%d')
         tick.time = tick.datetime.time().strftime('%H:%M:%S')
 
