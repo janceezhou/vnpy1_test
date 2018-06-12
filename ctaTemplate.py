@@ -472,7 +472,7 @@ class BarGenerator(object):
         self.xhourBar.volume += int(bar.volume)                
             
         # X小时已经走完
-        if not (bar.datetime.hour + 1) % self.hour:   # 可以用X整除
+        if not (bar.datetime.hour + 1) % self.xhour:   # 可以用X整除
             # 生成上一X小时K线的时间戳
             self.xhourBar.datetime = self.xhourBar.datetime.replace(minute=0, second=0, microsecond=0)  # 将分，秒和微秒设为0
             self.xhourBar.date = self.xhourBar.datetime.strftime('%Y%m%d')
