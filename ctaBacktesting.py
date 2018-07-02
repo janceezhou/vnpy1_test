@@ -183,8 +183,8 @@ class BacktestingEngine(object):
     #----------------------------------------------------------------------
     def loadHistoryData(self):
         """载入历史数据"""
-        self.dbClient = pymongo.MongoClient(globalSetting['mongoHost'], globalSetting['mongoPort'])
-        collection = self.dbClient[self.dbName][self.symbol]          
+        # self.dbClient = pymongo.MongoClient(globalSetting['mongoHost'], globalSetting['mongoPort'])
+        # collection = self.dbClient[self.dbName][self.symbol]          
 
         self.output(u'开始载入数据')
       
@@ -197,26 +197,57 @@ class BacktestingEngine(object):
             func = self.newTick
 
         # 载入初始化需要用的数据
-        flt = {'datetime':{'$gte':self.dataStartDate,
-                           '$lt':self.strategyStartDate}}        
-        initCursor = collection.find(flt).sort('datetime')
+        # flt = {'datetime':{'$gte':self.dataStartDate,
+        #                   '$lt':self.strategyStartDate}}        
+        # initCursor = collection.find(flt).sort('datetime')
         
         # 将数据从查询指针中读取出，并生成列表
         self.initData = []              # 清空initData列表
-        for d in initCursor:
+        import csv
+        
+        """将BitcoinCharts导出的csv格式的历史tick数据读取"""
+        self.output(u'开始读取CSV文件')
+    
+        # 读取数据和插入到数据库
+        f = open(r'D:\project\vnpy\vnpy\trader\app\ctaStrategy\bitstampUSD.csv',"r")
+        reader = csv.reader(f)
+        i = 0
+        
+        for d in reader:
+            tick = VtTickData()
+            tick.vtSymbol = 'bitstampUSD'
+            tick.symbol = 'bitstampUSD'
+    
+            tick.datetime = datetime.strptime(datetime.fromtimestamp(int(d[0])).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+            tick.date = tick.datetime.date().strftime('%Y%m%d')
+            tick.time = tick.datetime.time().strftime('%H:%M:%S')
+    
+            tick.lastPrice = float(d[1])
+            tick.lastVolume = float(d[2])
+    
             data = dataClass()
-            data.__dict__ = d
-            self.initData.append(data)      
+            data.__dict__ = tick.__dict__
+            self.initData.append(data)
+            i += 1
+            if i == 100:
+                break
+            
+        f.close()
+        
+        #for d in initCursor:
+            #data = dataClass()
+            #data.__dict__ = d
+            #self.initData.append(data)      
         
         # 载入回测数据
-        if not self.dataEndDate:
-            flt = {'datetime':{'$gte':self.strategyStartDate}}   # 数据过滤条件
-        else:
-            flt = {'datetime':{'$gte':self.strategyStartDate,
-                               '$lte':self.dataEndDate}}  
-        self.dbCursor = collection.find(flt).sort('datetime')
+        # if not self.dataEndDate:
+        #    flt = {'datetime':{'$gte':self.strategyStartDate}}   # 数据过滤条件
+        # else:
+        #     flt = {'datetime':{'$gte':self.strategyStartDate,
+        #                       '$lte':self.dataEndDate}}  
+        # self.dbCursor = collection.find(flt).sort('datetime')
         
-        self.output(u'载入完成，数据量：%s' %(initCursor.count() + self.dbCursor.count()))
+        #self.output(u'载入完成，数据量：%s' %(initCursor.count() + self.dbCursor.count()))
         
     #----------------------------------------------------------------------
     def runBacktesting(self):
@@ -244,10 +275,34 @@ class BacktestingEngine(object):
         
         self.output(u'开始回放数据')
 
-        for d in self.dbCursor:
+        # for d in self.dbCursor:
+        import csv
+        f = open(r'D:\project\vnpy\vnpy\trader\app\ctaStrategy\bitstampUSD.csv',"r")
+        reader = csv.reader(f)
+        i = 0
+        
+        for d in reader:
+            tick = VtTickData()
+            tick.vtSymbol = 'bitstampUSD'
+            tick.symbol = 'bitstampUSD'
+    
+            tick.datetime = datetime.strptime(datetime.fromtimestamp(int(d[0])).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+            tick.date = tick.datetime.date().strftime('%Y%m%d')
+            tick.time = tick.datetime.time().strftime('%H:%M:%S')
+    
+            tick.lastPrice = float(d[1])
+            tick.lastVolume = float(d[2])
+    
             data = dataClass()
-            data.__dict__ = d
-            func(data)     
+            data.__dict__ = tick.__dict__
+            func(data)
+            
+        f.close()    
+        
+        #for d in self.initData:
+            #data = dataClass()
+            #data.__dict__ = d.__dict__
+            #func(data)     
             
         self.output(u'数据回放结束')
         
@@ -469,6 +524,7 @@ class BacktestingEngine(object):
         # 保存到限价单字典中
         self.workingLimitOrderDict[orderID] = order
         self.limitOrderDict[orderID] = order
+        
         return [orderID]
     
     #----------------------------------------------------------------------
@@ -571,8 +627,12 @@ class BacktestingEngine(object):
     def saveSyncData(self, strategy):
         """保存同步数据（无效）"""
         pass
-        
-
+    
+    #----------------------------------------------------------------------
+    def getPriceTick(self, strategy):
+        """获取最小价格变动"""
+        return self.priceTick
+    
     #------------------------------------------------
     # 结果计算相关
     #------------------------------------------------      
@@ -782,6 +842,7 @@ class BacktestingEngine(object):
         d['profitLossRatio'] = profitLossRatio
         d['posList'] = posList
         d['tradeTimeList'] = tradeTimeList
+        d['resultList'] = resultList
         
         return d
         
@@ -874,20 +935,21 @@ class BacktestingEngine(object):
             self.output('setting: %s' %str(setting))
             self.initStrategy(strategyClass, setting)
             self.runBacktesting()
-            d = self.calculateBacktestingResult()
+            df = self.calculateDailyResult()
+            df, d = self.calculateDailyStatistics(df)            
             try:
                 targetValue = d[targetName]
             except KeyError:
                 targetValue = 0
-            resultList.append(([str(setting)], targetValue))
+            resultList.append(([str(setting)], targetValue, d))
         
         # 显示结果
         resultList.sort(reverse=True, key=lambda result:result[1])
         self.output('-' * 30)
         self.output(u'优化结果：')
         for result in resultList:
-            self.output(u'%s: %s' %(result[0], result[1]))
-        return result
+            self.output(u'参数：%s，目标：%s' %(result[0], result[1]))    
+        return resultList
             
     #----------------------------------------------------------------------
     def runParallelOptimization(self, strategyClass, optimizationSetting):
@@ -919,7 +981,9 @@ class BacktestingEngine(object):
         self.output('-' * 30)
         self.output(u'优化结果：')
         for result in resultList:
-            self.output(u'%s: %s' %(result[0], result[1]))    
+            self.output(u'参数：%s，目标：%s' %(result[0], result[1]))    
+            
+        return resultList
 
     #----------------------------------------------------------------------
     def updateDailyClose(self, dt, price):
@@ -972,6 +1036,7 @@ class BacktestingEngine(object):
         df['return'] = (np.log(df['balance']) - np.log(df['balance'].shift(1))).fillna(0)
         df['highlevel'] = df['balance'].rolling(min_periods=1,window=len(df),center=False).max()
         df['drawdown'] = df['balance'] - df['highlevel']        
+        df['ddPercent'] = df['drawdown'] / df['highlevel'] * 100
         
         # 计算统计结果
         startDate = df.index[0]
@@ -983,6 +1048,7 @@ class BacktestingEngine(object):
         
         endBalance = df['balance'].iloc[-1]
         maxDrawdown = df['drawdown'].min()
+        maxDdPercent = df['ddPercent'].min()
         
         totalNetPnl = df['netPnl'].sum()
         dailyNetPnl = totalNetPnl / totalDays
@@ -1000,6 +1066,7 @@ class BacktestingEngine(object):
         dailyTradeCount = totalTradeCount / totalDays
         
         totalReturn = (endBalance/self.capital - 1) * 100
+        annualizedReturn = totalReturn / totalDays * 240
         dailyReturn = df['return'].mean() * 100
         returnStd = df['return'].std() * 100
         
@@ -1017,6 +1084,7 @@ class BacktestingEngine(object):
             'lossDays': lossDays,
             'endBalance': endBalance,
             'maxDrawdown': maxDrawdown,
+            'maxDdPercent': maxDdPercent,
             'totalNetPnl': totalNetPnl,
             'dailyNetPnl': dailyNetPnl,
             'totalCommission': totalCommission,
@@ -1028,6 +1096,7 @@ class BacktestingEngine(object):
             'totalTradeCount': totalTradeCount,
             'dailyTradeCount': dailyTradeCount,
             'totalReturn': totalReturn,
+            'annualizedReturn': annualizedReturn,
             'dailyReturn': dailyReturn,
             'returnStd': returnStd,
             'sharpeRatio': sharpeRatio
@@ -1054,9 +1123,11 @@ class BacktestingEngine(object):
         self.output(u'起始资金：\t%s' % self.capital)
         self.output(u'结束资金：\t%s' % formatNumber(result['endBalance']))
     
-        self.output(u'总收益率：\t%s' % formatNumber(result['totalReturn']))
+        self.output(u'总收益率：\t%s%%' % formatNumber(result['totalReturn']))
+        self.output(u'年化收益：\t%s%%' % formatNumber(result['annualizedReturn']))
         self.output(u'总盈亏：\t%s' % formatNumber(result['totalNetPnl']))
-        self.output(u'最大回撤: \t%s' % formatNumber(result['maxDrawdown']))      
+        self.output(u'最大回撤: \t%s' % formatNumber(result['maxDrawdown']))   
+        self.output(u'百分比最大回撤: %s%%' % formatNumber(result['maxDdPercent']))   
         
         self.output(u'总手续费：\t%s' % formatNumber(result['totalCommission']))
         self.output(u'总滑点：\t%s' % formatNumber(result['totalSlippage']))
@@ -1273,5 +1344,5 @@ def optimize(strategyClass, setting, targetName,
         targetValue = d[targetName]
     except KeyError:
         targetValue = 0            
-    return (str(setting), targetValue)    
+    return (str(setting), targetValue, d)    
     

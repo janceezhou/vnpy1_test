@@ -195,6 +195,12 @@ class CtaTemplate(object):
         if self.trading:
             self.ctaEngine.saveSyncData(self)
     
+    #----------------------------------------------------------------------
+    def getPriceTick(self):
+        """查询最小价格变动"""
+        return self.ctaEngine.getPriceTick(self)
+        
+
 
 ########################################################################
 class TargetPosTemplate(CtaTemplate):
@@ -283,12 +289,12 @@ class TargetPosTemplate(CtaTemplate):
         if self.lastTick:
             if posChange > 0:
                 longPrice = self.lastTick.askPrice1 + self.tickAdd
-                if tick.upperLimit:
-                    longPrice = min(longPrice, tick.upperLimit)         # 涨停价检查
+                if self.lastTick.upperLimit:
+                    longPrice = min(longPrice, self.lastTick.upperLimit)         # 涨停价检查
             else:
                 shortPrice = self.lastTick.bidPrice1 - self.tickAdd
-                if tick.lowerLimit:
-                    shortPrice = max(shortPrice, tick.lowerLimit)       # 跌停价检查
+                if self.lastTick.lowerLimit:
+                    shortPrice = max(shortPrice, self.lastTick.lowerLimit)       # 跌停价检查
         else:
             if posChange > 0:
                 longPrice = self.lastBar.close + self.tickAdd
@@ -344,17 +350,20 @@ class BarGenerator(object):
     """
 
     #----------------------------------------------------------------------
-    def __init__(self, onBar, xmin=0, onXminBar=None, xhour=0, onXhourBar=None):
+    def __init__(self, onBar, xmin=0, onXminBar=None, xhour=0, onXhourBar=None, xday=0, onXdayBar=None):
         """Constructor"""
         self.bar = None             # 1分钟K线对象
         self.onBar = onBar          # 1分钟K线回调函数
         
         self.xminBar = None         # X分钟K线对象
         self.xhourBar = None        # X小时K线对象
+        self.xdayBar = None         # X天K线对象
         self.xmin = xmin            # X的值
         self.xhour = xhour          # X的值
+        self.xday = xday            # X的值
         self.onXminBar = onXminBar  # X分钟K线的回调函数
         self.onXhourBar = onXhourBar # X小时K线的回调函数
+        self.onXdayBar = onXdayBar # X小时K线的回调函数
         
         self.lastTick = None        # 上一TICK缓存对象
         
@@ -401,7 +410,8 @@ class BarGenerator(object):
         self.bar.openInterest = tick.openInterest
    
         if self.lastTick:
-            self.bar.volume += (tick.volume - self.lastTick.volume) # 当前K线内的成交量
+            volumeChange = tick.volume - self.lastTick.volume   # 当前K线内的成交量
+            self.bar.volume += max(volumeChange, 0)             # 避免夜盘开盘lastTick.volume为昨日收盘数据，导致成交量变化为负的情况
             
         # 缓存Tick
         self.lastTick = tick
@@ -422,6 +432,8 @@ class BarGenerator(object):
             self.xminBar.low = bar.low            
             
             self.xminBar.datetime = bar.datetime    # 以第一根分钟K线的开始时间戳作为X分钟线的时间戳
+            
+            
         # 累加老K线
         else:
             self.xminBar.high = max(self.xminBar.high, bar.high)
@@ -448,31 +460,15 @@ class BarGenerator(object):
     #----------------------------------------------------------------------            
     def updateHourBar(self, bar):
         """1小时K线更新"""
+        newHour = False   # 默认不是新的一小时
+        
         # 尚未创建对象
         if not self.xhourBar:
             self.xhourBar = VtBarData()
+            newHour = True
             
-            self.xhourBar.vtSymbol = bar.vtSymbol
-            self.xhourBar.symbol = bar.symbol
-            self.xhourBar.exchange = bar.exchange
-        
-            self.xhourBar.open = bar.open
-            self.xhourBar.high = bar.high
-            self.xhourBar.low = bar.low            
-            
-            self.xhourBar.datetime = bar.datetime    # 以第一根小时K线的开始时间戳作为X小时线的时间戳
-        # 累加老K线
-        else:
-            self.xhourBar.high = max(self.xhourBar.high, bar.high)
-            self.xhourBar.low = min(self.xhourBar.low, bar.low)
-    
-        # 通用部分
-        self.xhourBar.close = bar.close        
-        self.xhourBar.openInterest = bar.openInterest
-        self.xhourBar.volume += int(bar.volume)                
-            
-        # X小时已经走完
-        if not (bar.datetime.hour + 1) % self.xhour:   # 可以用X整除
+        # 新的一小时
+        elif self.xhourBar.datetime.hour != bar.datetime.hour and (not (bar.datetime.hour + 1) % self.xhour): # 可以用X整除
             # 生成上一X小时K线的时间戳
             self.xhourBar.datetime = self.xhourBar.datetime.replace(minute=0, second=0, microsecond=0)  # 将分，秒和微秒设为0
             self.xhourBar.date = self.xhourBar.datetime.strftime('%Y%m%d')
@@ -481,10 +477,80 @@ class BarGenerator(object):
             # 推送
             self.onXhourBar(self.xhourBar)
             
-            # 清空老K线缓存对象
-            self.xhourBar = None            
+            # 清空            老K线缓存对象
+            self.xhourBar = VtBarData()
+            
+            newHour = True
+            
+        # 初始化新一小时的K线数据
+        if newHour == True:
+            self.xhourBar.vtSymbol = bar.vtSymbol
+            self.xhourBar.symbol = bar.symbol
+            self.xhourBar.exchange = bar.exchange
+        
+            self.xhourBar.open = bar.open
+            self.xhourBar.high = bar.high
+            self.xhourBar.low = bar.low            
+            
+            self.xhourBar.datetime = bar.datetime    # 以第一根小时K线的开始时间戳作为X小时线的时间戳            
+            
+        # 累加老K线
+        else:
+            self.xhourBar.high = max(self.xhourBar.high, bar.high)
+            self.xhourBar.low = min(self.xhourBar.low, bar.low)
+    
+        # 通用部分
+        self.xhourBar.close = bar.close        
+        self.xhourBar.openInterest = bar.openInterest
+        self.xhourBar.volume += int(bar.volume)                       
 
-
+    #----------------------------------------------------------------------            
+    def updateDayBar(self, bar):
+        """1小时K线更新"""
+        newDay = False   # 默认不是新的一天
+        
+        # 尚未创建对象
+        if not self.xdayBar:
+            self.xdayBar = VtBarData()
+            newDay = True
+            
+        # 新的一小时
+        elif self.xdayBar.datetime.day != bar.datetime.day and (not (bar.datetime.day + 1) % self.xday): # 可以用X整除
+            # 生成上一X天K线的时间戳
+            self.xdayBar.datetime = self.xdayBar.datetime.replace(hour=0, minute=0, second=0, microsecond=0)  # 将时，分，秒和微秒设为0
+            self.xdayBar.date = self.xdayBar.datetime.strftime('%Y%m%d')
+            self.xdayBar.time = self.xdayBar.datetime.strftime('%H:%M:%S.%f')
+            
+            # 推送
+            self.onXdayBar(self.xdayBar)
+            
+            # 清空            老K线缓存对象
+            self.xdayBar = VtBarData()
+            
+            newDay = True
+            
+        # 初始化新一小时的K线数据
+        if newDay == True:
+            self.xdayBar.vtSymbol = bar.vtSymbol
+            self.xdayBar.symbol = bar.symbol
+            self.xdayBar.exchange = bar.exchange
+        
+            self.xdayBar.open = bar.open
+            self.xdayBar.high = bar.high
+            self.xdayBar.low = bar.low            
+            
+            self.xdayBar.datetime = bar.datetime    # 以第一根小时K线的开始时间戳作为X小时线的时间戳            
+            
+        # 累加老K线
+        else:
+            self.xdayBar.high = max(self.xdayBar.high, bar.high)
+            self.xdayBar.low = min(self.xdayBar.low, bar.low)
+    
+        # 通用部分
+        self.xdayBar.close = bar.close        
+        self.xdayBar.openInterest = bar.openInterest
+        self.xdayBar.volume += int(bar.volume)     
+        
 ########################################################################
 class ArrayManager(object):
     """
