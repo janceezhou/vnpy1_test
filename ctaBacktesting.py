@@ -872,19 +872,19 @@ class BacktestingEngine(object):
         # 绘图
         fig = plt.figure(figsize=(10, 16))
         
-        pCapital = plt.subplot(4, 1, 1)
+        pCapital = plt.subplot(2, 2, 1)
         pCapital.set_ylabel("capital")
         pCapital.plot(d['capitalList'], color='r', lw=0.8)
         
-        pDD = plt.subplot(4, 1, 2)
+        pDD = plt.subplot(2, 2, 2)
         pDD.set_ylabel("DD")
         pDD.bar(range(len(d['drawdownList'])), d['drawdownList'], color='g')
         
-        pPnl = plt.subplot(4, 1, 3)
+        pPnl = plt.subplot(2, 2, 3)
         pPnl.set_ylabel("pnl")
         pPnl.hist(d['pnlList'], bins=50, color='c')
 
-        pPos = plt.subplot(4, 1, 4)
+        pPos = plt.subplot(2, 2, 4)
         pPos.set_ylabel("Position")
         if d['posList'][-1] == 0:
             del d['posList'][-1]
@@ -1147,19 +1147,23 @@ class BacktestingEngine(object):
         # 绘图
         fig = plt.figure(figsize=(10, 16))
         
-        pBalance = plt.subplot(4, 1, 1)
+        pPrice = plt.subplot(5, 1, 1)
+        pPrice.set_title('closePrice')
+        df['closePrice'].plot(legend=True)
+        
+        pBalance = plt.subplot(5, 1, 2)
         pBalance.set_title('Balance')
         df['balance'].plot(legend=True)
         
-        pDrawdown = plt.subplot(4, 1, 2)
+        pDrawdown = plt.subplot(5, 1, 3)
         pDrawdown.set_title('Drawdown')
         pDrawdown.fill_between(range(len(df)), df['drawdown'].values)
         
-        pPnl = plt.subplot(4, 1, 3)
+        pPnl = plt.subplot(5, 1, 4)
         pPnl.set_title('Daily Pnl') 
         df['netPnl'].plot(kind='bar', legend=False, grid=False, xticks=[])
 
-        pKDE = plt.subplot(4, 1, 4)
+        pKDE = plt.subplot(5, 1, 5)
         pKDE.set_title('Daily Pnl Distribution')
         df['netPnl'].hist(bins=50)
         
