@@ -13,7 +13,7 @@
 from vnpy.trader.vtObject import VtBarData
 from vnpy.trader.vtConstant import EMPTY_STRING
 from vnpy.trader.app.ctaStrategy.ctaTemplate import (CtaTemplate, 
-                                                     BarManager, 
+                                                     BarGenerator, 
                                                      ArrayManager)
 
 
@@ -73,7 +73,7 @@ class AtrRsiStrategy(CtaTemplate):
         super(AtrRsiStrategy, self).__init__(ctaEngine, setting)
         
         # 创建K线合成器对象
-        self.bm = BarManager(self.onBar)
+        self.bm = BarGenerator(self.onBar)
         self.am = ArrayManager()
         
         # 注意策略类中的可变对象属性（通常是list和dict等），在策略初始化时需要重新创建，

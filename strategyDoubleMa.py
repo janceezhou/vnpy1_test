@@ -15,7 +15,7 @@ from __future__ import division
 
 from vnpy.trader.vtConstant import EMPTY_STRING, EMPTY_FLOAT
 from vnpy.trader.app.ctaStrategy.ctaTemplate import (CtaTemplate, 
-                                                     BarManager,
+                                                     BarGenerator,
                                                      ArrayManager)
 
 
@@ -62,8 +62,8 @@ class DoubleMaStrategy(CtaTemplate):
         """Constructor"""
         super(DoubleMaStrategy, self).__init__(ctaEngine, setting)
         
-        #self.bm = BarManager(self.onBar)
-        self.bm = BarManager(self.onBar, 60, self.onHourBar)
+        #self.bm = BarGenerator(self.onBar)
+        self.bm = BarGenerator(self.onBar, 60, self.onHourBar)
         self.am = ArrayManager()
         
         # 注意策略类中的可变对象属性（通常是list和dict等），在策略初始化时需要重新创建，

@@ -8,7 +8,7 @@ from datetime import time
 
 from vnpy.trader.vtObject import VtBarData
 from vnpy.trader.vtConstant import EMPTY_STRING
-from vnpy.trader.app.ctaStrategy.ctaTemplate import CtaTemplate, BarManager
+from vnpy.trader.app.ctaStrategy.ctaTemplate import CtaTemplate, BarGenerator
 
 
 ########################################################################
@@ -64,7 +64,7 @@ class DualThrustStrategy(CtaTemplate):
         """Constructor"""
         super(DualThrustStrategy, self).__init__(ctaEngine, setting) 
         
-        self.bm = BarManager(self.onBar)
+        self.bm = BarGenerator(self.onBar)
         self.barList = []
 
     #----------------------------------------------------------------------

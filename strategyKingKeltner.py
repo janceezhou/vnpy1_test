@@ -15,7 +15,7 @@ from __future__ import division
 from vnpy.trader.vtObject import VtBarData
 from vnpy.trader.vtConstant import EMPTY_STRING
 from vnpy.trader.app.ctaStrategy.ctaTemplate import (CtaTemplate, 
-                                                     BarManager, 
+                                                     BarGenerator, 
                                                      ArrayManager)
 
 
@@ -67,7 +67,7 @@ class KkStrategy(CtaTemplate):
         """Constructor"""
         super(KkStrategy, self).__init__(ctaEngine, setting)
         
-        self.bm = BarManager(self.onBar, 5, self.onFiveBar)     # 创建K线合成器对象
+        self.bm = BarGenerator(self.onBar, 5, self.onFiveBar)     # 创建K线合成器对象
         self.am = ArrayManager()
         
         self.buyOrderIDList = []
