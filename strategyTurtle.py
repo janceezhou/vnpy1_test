@@ -124,7 +124,7 @@ class TurtleStrategy(CtaTemplate):
         # 当前无仓位，发送开仓委托，或者计算上一次突破时的虚拟交易
         if len(self.orderList) == 0:
             if tick.lastPrice > self.historicHigh20:
-                if self.neverTrade or self.lastBreakLosing or (tick.lastPrice > self.historicHigh55):
+                if (self.neverTrade or self.lastBreakLosing or (tick.lastPrice > self.historicHigh55)) and self.unit != 0:
                     print tick.date
                     print 'buy'
                     print 'lastPrice: %f' % tick.lastPrice
@@ -135,7 +135,7 @@ class TurtleStrategy(CtaTemplate):
                     self.neverTrade = False
     
             elif tick.lastPrice < self.historicLow20:
-                if self.neverTrade or self.lastBreakLosing or (tick.lastPrice < self.historicLow55):
+                if (self.neverTrade or self.lastBreakLosing or (tick.lastPrice < self.historicLow55)) and self.unit != 0:
                     print tick.date
                     print 'short'
                     print 'lastPrice: %f' % tick.lastPrice
@@ -179,7 +179,7 @@ class TurtleStrategy(CtaTemplate):
             underMaxUnit = len(self.orderList) < self.maxUnit
             self.longStop = self.lastTradePrice - (2 + (len(self.orderList) - 1) / 2) * self.lastTradeAtrValue
             # add long position
-            if addUnit and underMaxUnit:
+            if addUnit and underMaxUnit and self.unit != 0:
                 print tick.date
                 print 'buy'
                 print 'lastPrice: %f' % tick.lastPrice
@@ -215,7 +215,7 @@ class TurtleStrategy(CtaTemplate):
             self.shortStop = self.lastTradePrice + (2 - (len(self.orderList) - 1) / 2) * self.lastTradeAtrValue
             
             # add short position
-            if addUnit and underMaxUnit:
+            if addUnit and underMaxUnit and self.unit != 0:
                 print tick.date
                 print 'short'
                 print 'lastPrice: %f' % tick.lastPrice
