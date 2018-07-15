@@ -110,7 +110,10 @@ class TurtleStrategy(CtaTemplate):
 
     #----------------------------------------------------------------------
     def onTick(self, tick):
-        """收到行情TICK推送（必须由用户继承实现）"""
+        """收到行情TICK推送（必须由用户继承实现）""" 
+        # 撤销之前发出的尚未成交的委托（包括限价单和停止单）
+        self.cancelAll()
+        
         self.bg.updateTick(tick)
         
         # 判断是否要进行交易        
@@ -122,7 +125,7 @@ class TurtleStrategy(CtaTemplate):
             return        
     
         # 当前无仓位，发送开仓委托，或者计算上一次突破时的虚拟交易
-        if len(self.orderList) == 0:
+        if self.pos == 0:
             if tick.lastPrice > self.historicHigh20:
                 if (self.neverTrade or self.lastBreakLosing or (tick.lastPrice > self.historicHigh55)) and self.unit != 0:
                     print tick.date
@@ -188,24 +191,26 @@ class TurtleStrategy(CtaTemplate):
                  
             # stop
             elif tick.lastPrice < self.longStop:
-                self.sell(tick.lastPrice, abs(self.pos), False)
-                self.orderList = []
-                self.lastBreakLosing = True
                 print tick.date
                 print 'sell'
                 print 'lastPrice: %f' % tick.lastPrice  
-                print 'stopPrice: %f' % self.longStop  
+                print 'stopPrice: %f' % self.longStop                  
+                self.sell(tick.lastPrice, abs(self.pos), False)
+                self.orderList = []
+                self.lastBreakLosing = True
+
     
             # exit
             elif tick.lastPrice < self.historicLow10:
+                print tick.date
+                print 'sell'
+                print 'lastPrice: %f' % tick.lastPrice  
+                print 'historicLow10: %f' % self.historicLow10                  
                 self.sell(tick.lastPrice, abs(self.pos), False)
                 self.orderList = []
                 # 近似认为此比交易盈利
                 self.lastBreakLosing = False
-                print tick.date
-                print 'sell'
-                print 'lastPrice: %f' % tick.lastPrice  
-                print 'historicLow10: %f' % self.historicLow10                
+              
     
         # 持有空头仓位
         elif self.pos < 0:
@@ -224,24 +229,26 @@ class TurtleStrategy(CtaTemplate):
 
             # stop
             elif tick.lastPrice > self.shortStop:
-                self.cover(tick.lastPrice, abs(self.pos), False)
-                self.orderList = []
-                self.lastBreakLosing = True
                 print tick.date
                 print 'cover'
                 print 'lastPrice: %f' % tick.lastPrice  
                 print 'shortStop: %f' % self.shortStop                  
+                self.cover(tick.lastPrice, abs(self.pos), False)
+                self.orderList = []
+                self.lastBreakLosing = True
+                
     
             # exit
             elif tick.lastPrice > self.historicHigh10:
+                print tick.date
+                print 'cover'
+                print 'lastPrice: %f' % tick.lastPrice  
+                print 'historicHigh10: %f' % self.historicHigh10                      
                 self.cover(tick.lastPrice, abs(self.pos), False)
                 self.orderList = []
                 # 近似认为此比交易盈利
                 self.lastBreakLosing = False
-                print tick.date
-                print 'cover'
-                print 'lastPrice: %f' % tick.lastPrice  
-                print 'historicHigh10: %f' % self.historicHigh10                  
+            
     
         # 同步数据到数据库o
         self.saveSyncData()        
@@ -372,9 +379,7 @@ class TurtleStrategy(CtaTemplate):
 
     #----------------------------------------------------------------------
     def onDayBar(self, bar):
-        """收到Bar推送（必须由用户继承实现）"""  
-        # 撤销之前发出的尚未成交的委托（包括限价单和停止单）
-        self.cancelAll()        
+        """收到Bar推送（必须由用户继承实现）"""        
         
         # 保存K线数据
         am = self.am
@@ -397,6 +402,8 @@ class TurtleStrategy(CtaTemplate):
         self.historicHigh55 = am55.high.max()
         self.historicLow55 = am55.low.min()
         
+        #if bar.date == '20150412':
+            #print 'Yes'
         self.unit = int(self.ctaEngine.capital * 0.01 / self.atrValue)    
     #----------------------------------------------------------------------
     def onOrder(self, order):
