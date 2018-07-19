@@ -1,5 +1,4 @@
 # encoding: UTF-8
-
 from vnpy.trader.vtObject import VtBarData
 from vnpy.trader.vtConstant import EMPTY_STRING
 from vnpy.trader.app.ctaStrategy.ctaTemplate import (CtaTemplate, 
@@ -207,7 +206,7 @@ class TurtleStrategy(CtaTemplate):
                 print tick.date
                 print 'buy'
                 print 'lastPrice: %f' % tick.lastPrice
-                print 'breakPrice: %f' % self.orderTradePriceList[-1] + self.lastTradeAtrValue / 2             
+                print 'breakPrice: %f' % (self.orderTradePriceList[-1] + self.lastTradeAtrValue / 2)            
                 self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False)) # 实现市价单
     
             # exit 退出
@@ -221,13 +220,13 @@ class TurtleStrategy(CtaTemplate):
                          
             # stop 止损
             else:
-                for i, stopPrice in enumerate(reversed(self.orderStopPriceList)):
-                    if tick.lastPrice < self.stopPrice:
+                for i, stopPrice in reversed(list(enumerate(self.orderStopPriceList))):
+                    if tick.lastPrice < stopPrice:
                         print tick.date
                         print 'sell'
                         print 'lastPrice: %f' % tick.lastPrice  
                         print 'stopPrice: %f' % stopPrice                  
-                        self.sell(self.minTradePrice, self.orderTradeVolumeList(i), False) # 实现市价单
+                        self.sell(self.minTradePrice, self.orderTradeVolumeList[i], False) # 实现市价单
                         self.orderList.pop()
                         self.tradeStopped = True
               
@@ -243,7 +242,7 @@ class TurtleStrategy(CtaTemplate):
                 print tick.date
                 print 'short'
                 print 'lastPrice: %f' % tick.lastPrice
-                print 'breakPrice: %f' % self.orderTradePriceList[-1] - self.lastTradeAtrValue / 2               
+                print 'breakPrice: %f' % (self.orderTradePriceList[-1] - self.lastTradeAtrValue / 2)            
                 self.orderList.extend(self.short(self.minTradePrice, self.unit, False)) # 实现市价单
 
             # exit 退出
@@ -257,13 +256,13 @@ class TurtleStrategy(CtaTemplate):
 
             # stop 止损
             else:
-                for i, stopPrice in enumerate(reversed(self.orderStopPriceList)):
+                for i, stopPrice in reversed(list(enumerate(self.orderStopPriceList))):
                     if tick.lastPrice > stopPrice:
                         print tick.date
                         print 'cover'
                         print 'lastPrice: %f' % tick.lastPrice  
-                        print 'shortStop: %f' % self.shortStop                
-                        self.cover(self.maxTradePrice, self.orderTradeVolumeList(i), False) # 实现市价单
+                        print 'shortStop: %f' % stopPrice              
+                        self.cover(self.maxTradePrice, self.orderTradeVolumeList[i], False) # 实现市价单
                         self.orderList.pop()
                         self.tradeStopped = True
     
@@ -315,25 +314,36 @@ class TurtleStrategy(CtaTemplate):
     def onTrade(self, trade):
 
         if abs(self.pos) > self.absPosBeforeTrade:
-            self.orderTradePriceList.extend(trade.price)
-            self.orderTradeVolumeList.extend(trade.volume)
+            
+            self.orderTradePriceList.append(trade.price)
+            self.orderTradeVolumeList.append(trade.volume)
             if self.pos > 0:
                 for i, stopPrice in enumerate(self.orderStopPriceList):
-                    orderStopPriceList[i] += self.lastTradeAtrValue / 2
-                self.orderStopPriceList.extend(trade.price - self.lastTradeAtrValue * 2)
+                    self.orderStopPriceList[i] += self.lastTradeAtrValue / 2
+                self.orderStopPriceList.append(trade.price - self.lastTradeAtrValue * 2)
             elif self.pos < 0:
                 for i, stopPrice in enumerate(self.orderStopPriceList):
-                    orderStopPriceList[i] -= self.lastTradeAtrValue / 2
-                self.orderStopPriceList.extend(trade.price + self.lastTradeAtrValue * 2)                
+                    self.orderStopPriceList[i] -= self.lastTradeAtrValue / 2
+                self.orderStopPriceList.append(trade.price + self.lastTradeAtrValue * 2)
+                
+        elif self.pos == 0:
+            
+            for i, tradePrice in enumerate(self.orderTradePriceList):
+                self.lastTradePnl += trade.price - tradePrice * self.orderTradeVolumeList[i]
+            self.orderTradePriceList = []
+            self.orderTradeVolumeList = []
+            self.orderStopPriceList = []
+            self.lastBreakLosing = self.lastTradePnl < 0
+            self.lastTradePnl = 0      
+            
         else:
+            
             self.lastTradePnl += (trade.price - self.orderTradePriceList[-1]) * self.orderTradeVolumeList[-1]
             self.orderTradePriceList.pop()
             self.orderTradeVolumeList.pop()
             self.orderStopPriceList.pop()
         
-        if self.pos == 0:
-            self.lastBreakLosing = self.lastTradePnl < 0
-            self.lastTradePnl = 0
+
             
     #----------------------------------------------------------------------
     def onStopOrder(self, so):
