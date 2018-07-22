@@ -42,6 +42,7 @@ class TurtleStrategy(CtaTemplate):
     absPosBeforeTrade = 0               # 保存每个tick的pos的绝对值，以判断onTrade的交易方向
     lastTradePnl = 0                    # 保存上一个trade的pnl，以判断上一次交易是否亏损
     tradeStopped = False                # 此趋势是否被止损过
+    pnlMultiplier = 0                   # 1为计算long头寸的pnl，-1为计算short头寸的pnl
     
     orderList = []                      # 保存开仓的委托代码的列表
     orderTradePriceList = []            # 保存开仓的委托的成交价
@@ -153,6 +154,7 @@ class TurtleStrategy(CtaTemplate):
                     self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False)) # 实现市价单
                     self.lastTradeAtrValue = self.atrValue
                     self.neverTrade = False
+                    self.pnlMultiplier = 1
     
             elif tick.lastPrice < self.historicLow20:
                 if (self.neverTrade or self.lastBreakLosing or (tick.lastPrice < self.historicLow55)) and self.unit != 0:
@@ -163,6 +165,7 @@ class TurtleStrategy(CtaTemplate):
                     self.orderList.extend(self.short(self.minTradePrice, self.unit, False)) # 实现市价单
                     self.lastTradeAtrValue = self.atrValue
                     self.neverTrade = False
+                    self.pnlMultiplier = -1
     
             # 虚拟交易，计算上一次突破信号是否造成亏损         
             if not (self.lastBreakLongTrade or self.lastBreakShortTrade):
@@ -329,7 +332,7 @@ class TurtleStrategy(CtaTemplate):
         elif self.pos == 0:
             
             for i, tradePrice in enumerate(self.orderTradePriceList):
-                self.lastTradePnl += trade.price - tradePrice * self.orderTradeVolumeList[i]
+                self.lastTradePnl += self.pnlMultiplier * (trade.price - tradePrice) * self.orderTradeVolumeList[i]
             self.orderTradePriceList = []
             self.orderTradeVolumeList = []
             self.orderStopPriceList = []
@@ -338,7 +341,7 @@ class TurtleStrategy(CtaTemplate):
             
         else:
             
-            self.lastTradePnl += (trade.price - self.orderTradePriceList[-1]) * self.orderTradeVolumeList[-1]
+            self.lastTradePnl += self.pnlMultiplier * (trade.price - self.orderTradePriceList[-1]) * self.orderTradeVolumeList[-1]
             self.orderTradePriceList.pop()
             self.orderTradeVolumeList.pop()
             self.orderStopPriceList.pop()
