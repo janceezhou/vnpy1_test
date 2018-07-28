@@ -710,6 +710,27 @@ class ArrayManager(object):
             return up, down
         return up[-1], down[-1]
     
+    #----------------------------------------------------------------------
+    def simpleReturn(self, n, onlyPositive=False, onlyNegative=False, array=False):
+        """简单收益率"""
+        result = self.close[-n:] / self.close[-n-1:-1] -1
+        
+        if array:
+            if onlyPositive:
+                result[result <= 0] = 0
+            elif onlyNegative:
+                result[result >= 0] = 0
+            return result
+
+        return result[-1]       
+    
+    #----------------------------------------------------------------------
+    def simpleVolatility(self, n, onlyPositive=False, onlyNegative=False, array=False):
+        """简单波动率"""
+        returnToUse = self.simpleReturn(n, onlyPositive, onlyNegative, array)
+        result = talib.STDDEV(returnToUse, n)
+
+        return result[-1]       
 
 ########################################################################
 class CtaSignal(object):
