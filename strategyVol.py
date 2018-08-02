@@ -6,7 +6,7 @@ from vnpy.trader.vtConstant import EMPTY_STRING, EMPTY_FLOAT
 from vnpy.trader.app.ctaStrategy.ctaTemplate import (CtaTemplate, 
                                                      BarGenerator,
                                                      ArrayManager)
-
+import datetime
 
 ########################################################################
 class VolStrategy(CtaTemplate):
@@ -17,12 +17,13 @@ class VolStrategy(CtaTemplate):
     # 策略参数
     fastWindow = 5     # 快速波动率参数
     slowWindow = 20     # 慢速波动率参数
-    initDays = 30       # 初始化数据所用的天数
+    initDays = 40       # 初始化数据所用的天数
     maxTradePrice = 999999              # 为了实现市价单效果，将此价格用在long时的限价单上
     minTradePrice = 0                   # 为了实现市价单效果，将此价格用在short时的限价单上
-    maxPos = 2
+    unit = 2
     trailingPrcnt = -0.3
     stopLossDays = 20
+    
     
     # 策略变量
     fastPositiveVol = EMPTY_FLOAT   
@@ -33,6 +34,10 @@ class VolStrategy(CtaTemplate):
     
     pnlList = [0 for i in range(stopLossDays)]
     drawDown = EMPTY_FLOAT
+    unitCalculationDate = None
+    stopLossEndDate = datetime.datetime(1, 1, 1, 0, 0)
+    stopLoss = False
+    previousStopLoss = False    
     
     
     # 参数列表，保存了参数的名称
@@ -115,22 +120,43 @@ class VolStrategy(CtaTemplate):
         am.updateBar(bar)
         if not am.inited:
             return
-        # 计算前一天的pnl并存入pnlList
-        self.pnlList[0:self.stopLossDays-1] = self.pnlList[1:self.stopLossDays]
-        self.pnlList[-1] = self.pnlList[-2] + self.pos * (am.close[-1] - am.close[-2])
-        
-        # 计算drawdown
-        self.drawDown = self.pnlList[-1] - max(self.pnlList)
 
-        if max(self.pnlList) == 0 or self.drawDown / max(bar.close*2, max(self.pnlList)) > self.trailingPrcnt:
+        # 每个月计算一次unit数
+        if self.unitCalculationDate == None or bar.datetime.month != self.unitCalculationDate.month:
+            self.unitCalculationDate = bar.datetime
+            #slowVol = am.simpleVolatility(self.slowWindow, onlyPositive=False, onlyNegative=False, array=True) 
+            #self.unit = int(self.ctaEngine.capital * 0.005 / (slowVol * bar.close))  
+            self.unit = int(self.ctaEngine.capital * 0.01 / am.atr(self.stopLossDays)) 
+
+        if bar.datetime == self.stopLossEndDate:
             
-            # 计算快慢
+            # 清空pnlList
+            self.pnlList = [0 for i in range(self.stopLossDays)]
+            self.stopLoss = False
+        
+        if bar.datetime >= self.stopLossEndDate:
+            
+            # 计算前一天的pnl并存入pnlList
+            self.pnlList[0:self.stopLossDays-1] = self.pnlList[1:self.stopLossDays]
+            self.pnlList[-1] = self.pnlList[-2] + self.pos * (am.close[-1] - am.close[-2])
+            
+            # 计算drawdown
+            self.drawDown = self.pnlList[-1] - max(self.pnlList)
+            self.previousStopLoss = self.stopLoss
+            self.stopLoss = self.drawDown / max(bar.close * self.unit, max(self.pnlList)) <= self.trailingPrcnt
+            
+            if max(self.pnlList) != 0 and self.stopLoss and self.previousStopLoss:
+                self.stopLossEndDate = bar.datetime + datetime.timedelta (days=self.stopLossDays)   
+
+        if  bar.datetime >= self.stopLossEndDate:
+            
+            # 计算快慢波动率
             self.fastPositiveVol = am.simpleVolatility(self.fastWindow, onlyPositive=True, onlyNegative=False, array=True)
             self.fastNegativeVol = am.simpleVolatility(self.fastWindow, onlyPositive=False, onlyNegative=True, array=True)
             
             self.slowPositiveVol = am.simpleVolatility(self.slowWindow, onlyPositive=True, onlyNegative=False, array=True)
-            self.slowNegativeVol = am.simpleVolatility(self.slowWindow, onlyPositive=False, onlyNegative=True, array=True)  
-            
+            self.slowNegativeVol = am.simpleVolatility(self.slowWindow, onlyPositive=False, onlyNegative=True, array=True)                          
+
             # 判断买卖
             fastCross = self.fastPositiveVol > self.fastNegativeVol # 短期上行波动率大于下行波动率
             slowCross = self.slowPositiveVol > self.slowNegativeVol # 长期上行波动率大于下行波动率
@@ -142,29 +168,13 @@ class VolStrategy(CtaTemplate):
         else:
             signal =0
         
-        print "%s|%f|%f|%f|%f|%f|%f|%d" % (bar.date, bar.close, self.slowPositiveVol, self.slowNegativeVol, self.fastPositiveVol, self.fastNegativeVol, signal, self.pnlList[-1])
+        print "%s|%f|%f|%f|%f|%f|%d|%d|%d|%d" % (bar.date, bar.close, self.slowPositiveVol, self.slowNegativeVol, self.fastPositiveVol, self.fastNegativeVol, signal, self.unit, self.pos, self.pnlList[-1])
         
-        if signal > 0:
-            # 如果手头没有持仓，则直接做多
-            if self.pos == 0:
-                self.buy(self.maxTradePrice, self.maxPos, False)
-            # 如果有空头持仓，则先平空，再做多
-            elif self.pos < 0:
-                self.cover(self.maxTradePrice, self.maxPos, False)
-                self.buy(self.maxTradePrice, self.maxPos, False)
+        if signal * self.unit > self.pos:
+            self.buy(self.maxTradePrice, abs(signal * self.unit - self.pos), False)
 
-        elif signal < 0:
-            if self.pos == 0:
-                self.short(self.minTradePrice, self.maxPos, False)
-            elif self.pos > 0:
-                self.sell(self.minTradePrice, self.maxPos, False)
-                self.short(self.minTradePrice, self.maxPos, False)
-                
-        elif signal == 0:
-            if self.pos > 0:
-                self.sell(self.minTradePrice, self.maxPos, False)
-            elif self.pos < 0:
-                self.cover(self.maxTradePrice, self.maxPos, False)
+        elif signal * self.unit < self.pos:
+            self.sell(self.minTradePrice, abs(signal * self.unit - self.pos), False)
                 
         # 发出状态更新事件
         self.putEvent()
