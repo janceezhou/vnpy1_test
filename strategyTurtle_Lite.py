@@ -136,10 +136,7 @@ class TurtleStrategy(CtaTemplate):
         if self.pos == 0:
             if tick.lastPrice > self.historicHigh20:
                 if (self.neverTrade or self.lastBreakLosing or (tick.lastPrice > self.historicHigh55)) and self.unit != 0:
-                    print tick.date
-                    print 'buy'
-                    print 'lastPrice: %f' % tick.lastPrice
-                    print 'historicHigh20: %f' % self.historicHigh20
+                    print "%s|Buy|LastPrice: %f|HistoricHigh20: %f|Unit: %d" % (tick.date, tick.lastPrice, self.historicHigh20, self.unit)
                     self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False))
                     self.lastTradePrice = tick.lastPrice
                     self.lastTradeAtrValue = self.atrValue
@@ -147,10 +144,7 @@ class TurtleStrategy(CtaTemplate):
     
             elif tick.lastPrice < self.historicLow20:
                 if (self.neverTrade or self.lastBreakLosing or (tick.lastPrice < self.historicLow55)) and self.unit != 0:
-                    print tick.date
-                    print 'short'
-                    print 'lastPrice: %f' % tick.lastPrice
-                    print 'historicLow20: %f' % self.historicLow20                    
+                    print "%s|Short|LastPrice: %f|HistoricLow20: %f|Unit: %d" % (tick.date, tick.lastPrice, self.historicLow20, self.unit)                 
                     self.orderList.extend(self.short(self.minTradePrice, self.unit, False))
                     self.lastTradePrice = tick.lastPrice
                     self.lastTradeAtrValue = self.atrValue
@@ -188,21 +182,15 @@ class TurtleStrategy(CtaTemplate):
             
             addUnit = tick.lastPrice > (self.lastTradePrice + len(self.orderList) * self.lastTradeAtrValue / 2)
             underMaxUnit = len(self.orderList) < self.maxUnit
-            self.longStop = self.lastTradePrice - (2 + (len(self.orderList) - 1) / 2) * self.lastTradeAtrValue
+            self.longStop = self.lastTradePrice - (2 - (len(self.orderList) - 1) / 2) * self.lastTradeAtrValue
             # add long position
             if addUnit and underMaxUnit and self.unit != 0:
-                print tick.date
-                print 'buy'
-                print 'lastPrice: %f' % tick.lastPrice
-                print 'breakPrice: %f' % (self.lastTradePrice + len(self.orderList) * self.lastTradeAtrValue / 2)                 
+                print "%s|Buy|LastPrice: %f|BreakPrice: %f|Unit: %d" % (tick.date, tick.lastPrice, self.lastTradePrice + len(self.orderList) * self.lastTradeAtrValue / 2, self.unit)             
                 self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False))
                  
             # stop
             elif tick.lastPrice < self.longStop:
-                print tick.date
-                print 'sell'
-                print 'lastPrice: %f' % tick.lastPrice  
-                print 'stopPrice: %f' % self.longStop                  
+                print "%s|Sell|LastPrice: %f|StopPrice: %f|Unit: %d" % (tick.date, tick.lastPrice, self.longStop, self.unit)                  
                 self.sell(self.minTradePrice, abs(self.pos), False)
                 self.orderList = []
                 self.lastBreakLosing = True
@@ -210,10 +198,7 @@ class TurtleStrategy(CtaTemplate):
     
             # exit
             elif tick.lastPrice < self.historicLow10:
-                print tick.date
-                print 'sell'
-                print 'lastPrice: %f' % tick.lastPrice  
-                print 'historicLow10: %f' % self.historicLow10                  
+                print "%s|Sell|LastPrice: %f|HistoricLow10: %f|Unit: %d" % (tick.date, tick.lastPrice, self.historicLow10, self.unit)             
                 self.sell(self.minTradePrice, abs(self.pos), False)
                 self.orderList = []
                 # 近似认为此比交易盈利
@@ -229,18 +214,12 @@ class TurtleStrategy(CtaTemplate):
             
             # add short position
             if addUnit and underMaxUnit and self.unit != 0:
-                print tick.date
-                print 'short'
-                print 'lastPrice: %f' % tick.lastPrice
-                print 'breakPrice: %f' % (self.lastTradePrice - len(self.orderList) * self.lastTradeAtrValue / 2)                  
+                print "%s|Short|LastPrice: %f|BreakPrice: %f|Unit: %d" % (tick.date, tick.lastPrice, self.lastTradePrice - len(self.orderList) * self.lastTradeAtrValue / 2, self.unit)              
                 self.orderList.extend(self.short(self.minTradePrice, self.unit, False))
 
             # stop
             elif tick.lastPrice > self.shortStop:
-                print tick.date
-                print 'cover'
-                print 'lastPrice: %f' % tick.lastPrice  
-                print 'shortStop: %f' % self.shortStop                  
+                print "%s|Cover|LastPrice: %f|StopPrice: %f|Unit: %d" % (tick.date, tick.lastPrice, self.shortStop, self.unit)                  
                 self.cover(self.maxTradePrice, abs(self.pos), False)
                 self.orderList = []
                 self.lastBreakLosing = True
@@ -248,10 +227,7 @@ class TurtleStrategy(CtaTemplate):
     
             # exit
             elif tick.lastPrice > self.historicHigh10:
-                print tick.date
-                print 'cover'
-                print 'lastPrice: %f' % tick.lastPrice  
-                print 'historicHigh10: %f' % self.historicHigh10                      
+                print "%s|Cover|LastPrice: %f|HistoricHigh10: %f|Unit: %d" % (tick.date, tick.lastPrice, self.historicHigh10, self.unit)                      
                 self.cover(self.maxTradePrice, abs(self.pos), False)
                 self.orderList = []
                 # 近似认为此比交易盈利
