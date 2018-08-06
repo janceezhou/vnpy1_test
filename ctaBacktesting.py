@@ -974,7 +974,7 @@ class BacktestingEngine(object):
         l = []
 
         for setting in settingList:
-            l.append(pool.apply_async(testDates, (strategyClass, setting,
+            l.append(pool.apply_async(optimize, (strategyClass, setting,
                                                  targetName, self.mode, 
                                                  self.startDate, self.initDays, self.endDate,
                                                  self.slippage, self.rate, self.size, self.priceTick,
