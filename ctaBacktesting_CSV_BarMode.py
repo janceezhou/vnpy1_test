@@ -119,25 +119,28 @@ class BacktestingEngine(object):
     #------------------------------------------------
     
     #----------------------------------------------------------------------
-    def setStartDate(self, startDate='20100416', initDays=10):
+    def setStartDate(self, startDate='20100416', initDays=10, diffDays=0):
         """设置回测的启动日期"""
         self.startDate = startDate
         self.initDays = initDays
         
-        self.dataStartDate = datetime.strptime(startDate, '%Y%m%d')
+        diffDaysDelta = timedelta(diffDays)
+        self.dataStartDate = datetime.strptime(startDate, '%Y%m%d') + diffDaysDelta
         
         initTimeDelta = timedelta(initDays)
         self.strategyStartDate = self.dataStartDate + initTimeDelta
         
     #----------------------------------------------------------------------
-    def setEndDate(self, endDate=''):
+    def setEndDate(self, endDate='', diffDays=0):
         """设置回测的结束日期"""
         self.endDate = endDate
         
         if endDate:
-            self.dataEndDate = datetime.strptime(endDate, '%Y%m%d')
+            diffDaysDelta = timedelta(diffDays)
+            self.dataEndDate = datetime.strptime(endDate, '%Y%m%d') + diffDaysDelta
             
             # 若不修改时间则会导致不包含dataEndDate当天数据
+            
             self.dataEndDate = self.dataEndDate.replace(hour=23, minute=59)    
         
     #----------------------------------------------------------------------
@@ -205,18 +208,17 @@ class BacktestingEngine(object):
         self.initData = []              # 清空initData列表
         import csv
         
-        """将IF0000_1min格式的历史日线数据读取"""
+        """将BitcoinCharts导出的csv格式的历史tick数据读取"""
         self.output(u'开始读取CSV文件')
     
-        # 读取数据和插入到数据库
-        f = open(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\rb0000_1min.csv',"r")
-        reader = csv.DictReader(f)
-        i = 0
+        # 载入初始化需要用的数据
+        f = open(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\bitstampUSD.csv',"r")
+        reader = csv.reader(f)
         
         for d in reader:
             bar = VtBarData()
-            bar.vtSymbol = 'rb0000'
-            bar.symbol = 'rb0000'
+            bar.vtSymbol = 'bitstampUSD'
+            bar.symbol = 'bitstampUSD'
             bar.open = float(d['Open'])
             bar.high = float(d['High'])
             bar.low = float(d['Low'])
@@ -225,13 +227,15 @@ class BacktestingEngine(object):
             bar.time = d['Time']
             bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
             bar.volume = d['TotalVolume']
+
+            if bar.datetime.date() < self.dataStartDate.date() :
+                continue
+            if bar.datetime.date() >= self.strategyStartDate.date():
+                break
     
             data = dataClass()
             data.__dict__ = bar.__dict__
             self.initData.append(data)
-            i += 1
-            if i == 100:
-                break
             
         f.close()
         
@@ -278,10 +282,10 @@ class BacktestingEngine(object):
 
         # for d in self.dbCursor:
         import csv
-        f = open(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\rb0000_1min.csv',"r")
-        reader = csv.DictReader(f)
-        i = 0
-        
+        f = open(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\bitstampUSD.csv',"r")
+        reader = csv.reader(f)
+
+        # 载入回测数据
         for d in reader:
             bar = VtBarData()
             bar.vtSymbol = 'rb0000'
@@ -294,6 +298,15 @@ class BacktestingEngine(object):
             bar.time = d['Time']
             bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
             bar.volume = d['TotalVolume']
+
+            if not self.dataEndDate:
+                if bar.datetime.date() < self.strategyStartDate.date():
+                    continue
+            else:
+                if bar.datetime.date() < self.strategyStartDate.date():
+                    continue
+                if bar.datetime.date() > self.dataEndDate.date():
+                    break
     
             data = dataClass()
             data.__dict__ = bar.__dict__
@@ -527,8 +540,6 @@ class BacktestingEngine(object):
         self.workingLimitOrderDict[orderID] = order
         self.limitOrderDict[orderID] = order
         
-        print 'SEND ORDER'
-        
         return [orderID]
     
     #----------------------------------------------------------------------
@@ -543,8 +554,6 @@ class BacktestingEngine(object):
             self.strategy.onOrder(order)
             
             del self.workingLimitOrderDict[vtOrderID]
-            
-            print 'CANCEL ORDER'
         
     #----------------------------------------------------------------------
     def sendStopOrder(self, vtSymbol, orderType, price, volume, strategy):
@@ -895,7 +904,12 @@ class BacktestingEngine(object):
         if d['posList'][-1] == 0:
             del d['posList'][-1]
         tradeTimeIndex = [item.strftime("%m/%d %H:%M:%S") for item in d['tradeTimeList']]
-        xindex = np.arange(0, len(tradeTimeIndex), np.int(len(tradeTimeIndex)/10))
+        # 原代码step是len(tradeTimeIndex)/10， 交易量少时step可能为0， 生成错误
+        # xindex = np.arange(0, len(tradeTimeIndex), np.int(len(tradeTimeIndex)/10))
+        if len(tradeTimeIndex) < 10:
+            xindex = np.arange(0, len(tradeTimeIndex), 1)
+        else:
+            xindex = np.arange(0, len(tradeTimeIndex), np.int(len(tradeTimeIndex)/10))
         tradeTimeIndex = map(lambda i: tradeTimeIndex[i], xindex)
         pPos.plot(d['posList'], color='k', drawstyle='steps-pre')
         pPos.set_ylim(-1.2, 1.2)
@@ -992,6 +1006,52 @@ class BacktestingEngine(object):
         return resultList
 
     #----------------------------------------------------------------------
+    def runParallelTestDates(self, strategyClass, diffDaysSetting, strategySetting=None):
+        """并行优化参数"""
+        # 获取优化设置        
+        diffDaysList = diffDaysSetting.generateSetting()
+        targetName = diffDaysSetting.optimizeTarget
+        
+        # 检查参数设置问题
+        if not diffDaysList or not targetName:
+            self.output(u'优化设置有问题，请检查')
+        
+        # 多进程优化，启动一个对应CPU核心数量的进程池
+        pool = multiprocessing.Pool(multiprocessing.cpu_count())
+        l = []
+        
+        resultList = []
+
+        for diffDaysDict in diffDaysList:
+            diffDays = diffDaysDict.values()[0]
+            #l.append(pool.apply_async(testDates, (strategyClass, strategySetting,
+                                                 #targetName, self.mode, 
+                                                 #self.startDate, self.initDays, self.endDate, diffDays,
+                                                 #self.slippage, self.rate, self.size, self.priceTick,
+                                                 #self.dbName, self.symbol)))
+            resultList.append(testDates(strategyClass, strategySetting, targetName, self.mode, 
+                                        self.startDate, self.initDays, self.endDate, diffDays,
+                                        self.slippage, self.rate, self.size, self.priceTick,
+                                        self.dbName, self.symbol))   
+            
+        #pool.close()
+        #pool.join()
+        
+        ## 显示结果
+        #resultList = [res.get() for res in l]
+        #resultList.sort(reverse=True, key=lambda result:result[1])
+        
+        self.output('-' * 30)
+        self.output(u'优化结果：')
+        for result in resultList:
+            self.output(u'参数：%s，目标：%s' %(result[0], result[1]))
+            self.showDailyResult(result[2], result[3])
+        
+   
+            
+        return resultList
+
+    #----------------------------------------------------------------------
     def updateDailyClose(self, dt, price):
         """更新每日收盘价"""
         date = dt.date()
@@ -1072,12 +1132,12 @@ class BacktestingEngine(object):
         dailyTradeCount = totalTradeCount / totalDays
         
         totalReturn = (endBalance/self.capital - 1) * 100
-        annualizedReturn = totalReturn / totalDays * 240
+        annualizedReturn = totalReturn / totalDays * 365
         dailyReturn = df['return'].mean() * 100
         returnStd = df['return'].std() * 100
         
         if returnStd:
-            sharpeRatio = dailyReturn / returnStd * np.sqrt(240)
+            sharpeRatio = dailyReturn / returnStd * np.sqrt(365)
         else:
             sharpeRatio = 0
             
@@ -1116,7 +1176,8 @@ class BacktestingEngine(object):
         if df is None:
             df = self.calculateDailyResult()
             df, result = self.calculateDailyStatistics(df)
-            
+        # df.to_csv(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\output.csv') 
+        
         # 输出统计结果
         self.output('-' * 30)
         self.output(u'首个交易日：\t%s' % result['startDate'])
@@ -1354,4 +1415,31 @@ def optimize(strategyClass, setting, targetName,
         targetValue = d[targetName]
     except KeyError:
         targetValue = 0            
-        return (str(setting), targetValue, d) 
+    return (str(setting), targetValue, d) 
+
+#----------------------------------------------------------------------
+def testDates(strategyClass, setting, targetName,
+             mode, startDate, initDays, endDate, diffDays,
+             slippage, rate, size, priceTick,
+             dbName, symbol):
+    """多进程优化时跑在每个进程中运行的函数"""
+    engine = BacktestingEngine()
+    engine.setBacktestingMode(mode)
+    engine.setStartDate(startDate, initDays, diffDays)
+    engine.setEndDate(endDate, diffDays)
+    engine.setSlippage(slippage)
+    engine.setRate(rate)
+    engine.setSize(size)
+    engine.setPriceTick(priceTick)
+    engine.setDatabase(dbName, symbol)
+    
+    engine.initStrategy(strategyClass, setting)
+    engine.runBacktesting()
+    
+    df = engine.calculateDailyResult()
+    df, d = engine.calculateDailyStatistics(df)
+    try:
+        targetValue = d[targetName]
+    except KeyError:
+        targetValue = 0            
+    return (diffDays, targetValue, df, d) 
