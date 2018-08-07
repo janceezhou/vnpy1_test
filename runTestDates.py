@@ -20,7 +20,7 @@ if __name__ == '__main__':
     engine.setBacktestingMode(engine.TICK_MODE)
 
     # 设置回测用的数据起始日期
-    engine.setStartDate('20160601')
+    engine.setStartDate('20160601',55)
     engine.setEndDate('20161231')
     
     # 设置产品相关参数

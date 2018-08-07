@@ -211,10 +211,9 @@ class BacktestingEngine(object):
         """将BitcoinCharts导出的csv格式的历史tick数据读取"""
         self.output(u'开始读取CSV文件')
     
-        # 读取数据和插入到数据库
+        # 载入初始化需要用的数据
         f = open(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\bitstampUSD.csv',"r")
         reader = csv.reader(f)
-        i = 0
         
         for d in reader:
             tick = VtTickData()
@@ -222,6 +221,10 @@ class BacktestingEngine(object):
             tick.symbol = 'bitstampUSD'
     
             tick.datetime = datetime.strptime(datetime.fromtimestamp(int(d[0])).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+            if tick.datetime.date() < self.dataStartDate.date() :
+                continue
+            if tick.datetime.date() >= self.strategyStartDate.date():
+                break
             tick.date = tick.datetime.date().strftime('%Y%m%d')
             tick.time = tick.datetime.time().strftime('%H:%M:%S')
     
@@ -232,9 +235,6 @@ class BacktestingEngine(object):
             data = dataClass()
             data.__dict__ = tick.__dict__
             self.initData.append(data)
-            i += 1
-            if i == 100:
-                break
             
         f.close()
         
@@ -283,16 +283,22 @@ class BacktestingEngine(object):
         import csv
         f = open(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\bitstampUSD.csv',"r")
         reader = csv.reader(f)
-        i = 0
-        
+
+        # 载入回测数据
         for d in reader:
             tick = VtTickData()
             tick.vtSymbol = 'bitstampUSD'
             tick.symbol = 'bitstampUSD'
     
             tick.datetime = datetime.strptime(datetime.fromtimestamp(int(d[0])).strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
-            if tick.datetime.date() < self.dataStartDate.date() or tick.datetime.date() > self.dataEndDate.date():
-                continue
+            if not self.dataEndDate:
+                if tick.datetime.date() < self.strategyStartDate.date():
+                    continue
+            else:
+                if tick.datetime.date() < self.strategyStartDate.date():
+                    continue
+                if tick.datetime.date() > self.dataEndDate.date():
+                    break
             tick.date = tick.datetime.date().strftime('%Y%m%d')
             tick.time = tick.datetime.time().strftime('%H:%M:%S')
     
@@ -896,7 +902,12 @@ class BacktestingEngine(object):
         if d['posList'][-1] == 0:
             del d['posList'][-1]
         tradeTimeIndex = [item.strftime("%m/%d %H:%M:%S") for item in d['tradeTimeList']]
-        xindex = np.arange(0, len(tradeTimeIndex), np.int(len(tradeTimeIndex)/10))
+        # 原代码step是len(tradeTimeIndex)/10， 交易量少时step可能为0， 生成错误
+        # xindex = np.arange(0, len(tradeTimeIndex), np.int(len(tradeTimeIndex)/10))
+        if len(tradeTimeIndex) < 10:
+            xindex = np.arange(0, len(tradeTimeIndex), 1)
+        else:
+            xindex = np.arange(0, len(tradeTimeIndex), np.int(len(tradeTimeIndex)/10))
         tradeTimeIndex = map(lambda i: tradeTimeIndex[i], xindex)
         pPos.plot(d['posList'], color='k', drawstyle='steps-pre')
         pPos.set_ylim(-1.2, 1.2)
@@ -1163,7 +1174,8 @@ class BacktestingEngine(object):
         if df is None:
             df = self.calculateDailyResult()
             df, result = self.calculateDailyStatistics(df)
-            
+        # df.to_csv(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\output.csv') 
+        
         # 输出统计结果
         self.output('-' * 30)
         self.output(u'首个交易日：\t%s' % result['startDate'])
