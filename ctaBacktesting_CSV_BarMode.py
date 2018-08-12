@@ -42,6 +42,8 @@ class BacktestingEngine(object):
     
     TICK_MODE = 'tick'
     BAR_MODE = 'bar'
+    DB_MODE = 'db'
+    CSV_MODE = 'csv'
 
     #----------------------------------------------------------------------
     def __init__(self):
@@ -74,6 +76,9 @@ class BacktestingEngine(object):
         self.initData = []          # 初始化用的数据
         self.dbName = ''            # 回测数据库名
         self.symbol = ''            # 回测集合名
+        self.dataSource = self.DB_MODE        # 回测数据源，默认为DB 
+        self.csvDataPath = ''       # 回测csv数据路径
+        self.csvDateFormat = '%d/%m/%Y %H:%M'
         
         self.dataStartDate = None       # 回测数据开始日期，datetime对象
         self.dataEndDate = None         # 回测数据结束日期，datetime对象
@@ -155,6 +160,21 @@ class BacktestingEngine(object):
         self.symbol = symbol
     
     #----------------------------------------------------------------------
+    def setDataSource(self, dataSource):
+        """设置CSV路径"""
+        self.dataSource = dataSource   
+    
+    #----------------------------------------------------------------------
+    def setCsvDataPath(self, csvDataPath):
+        """设置CSV路径"""
+        self.csvDataPath = csvDataPath
+    
+    #----------------------------------------------------------------------
+    def setCsvDateFormat(self, csvDateFormat):
+        """设置CSV路径"""
+        self.csvDateFormat = csvDateFormat    
+    
+    #----------------------------------------------------------------------
     def setCapital(self, capital):
         """设置资本金"""
         self.capital = capital
@@ -181,13 +201,24 @@ class BacktestingEngine(object):
     
     #------------------------------------------------
     # 数据回放相关
-    #------------------------------------------------    
+    #------------------------------------------------  
     
+    #----------------------------------------------------------------------
+    def downloadJQData(self, symbol, path, startDate='2015-01-01', endDate='', freq='minute'):
+        from jqdatasdk import *
+        auth('15605252619', 'zhu19861123')
+        df = ''
+        
+        if endDate:
+            df = get_price(symbol, start_date=startDate, end_date=endDate, frequency=freq)
+        else:
+            df = get_price(symbol, start_date=startDate, frequency=freq)
+            
+        df.to_csv(path, header=None)    
+        
     #----------------------------------------------------------------------
     def loadHistoryData(self):
         """载入历史数据"""
-        # self.dbClient = pymongo.MongoClient(globalSetting['mongoHost'], globalSetting['mongoPort'])
-        # collection = self.dbClient[self.dbName][self.symbol]          
 
         self.output(u'开始载入数据')
       
@@ -198,61 +229,73 @@ class BacktestingEngine(object):
         else:
             dataClass = VtTickData
             func = self.newTick
-
-        # 载入初始化需要用的数据
-        # flt = {'datetime':{'$gte':self.dataStartDate,
-        #                   '$lt':self.strategyStartDate}}        
-        # initCursor = collection.find(flt).sort('datetime')
         
-        # 将数据从查询指针中读取出，并生成列表
-        self.initData = []              # 清空initData列表
-        import csv
-        
-        """将BitcoinCharts导出的csv格式的历史tick数据读取"""
-        self.output(u'开始读取CSV文件')
-    
-        # 载入初始化需要用的数据
-        f = open(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\bitstampUSD.csv',"r")
-        reader = csv.reader(f)
-        
-        for d in reader:
-            bar = VtBarData()
-            bar.vtSymbol = 'bitstampUSD'
-            bar.symbol = 'bitstampUSD'
-            bar.open = float(d['Open'])
-            bar.high = float(d['High'])
-            bar.low = float(d['Low'])
-            bar.close = float(d['Close'])
-            bar.date = datetime.strptime(d['Date'], '%Y-%m-%d').strftime('%Y%m%d')
-            bar.time = d['Time']
-            bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
-            bar.volume = d['TotalVolume']
-
-            if bar.datetime.date() < self.dataStartDate.date() :
-                continue
-            if bar.datetime.date() >= self.strategyStartDate.date():
-                break
-    
-            data = dataClass()
-            data.__dict__ = bar.__dict__
-            self.initData.append(data)
+        if self.dataSource == self.DB_MODE:
             
-        f.close()
+            self.dbClient = pymongo.MongoClient(globalSetting['mongoHost'], globalSetting['mongoPort'])
+            collection = self.dbClient[self.dbName][self.symbol]          
+    
+            # 载入初始化需要用的数据
+            flt = {'datetime':{'$gte':self.dataStartDate,
+                              '$lt':self.strategyStartDate}}        
+            initCursor = collection.find(flt).sort('datetime')
+            
+            # 将数据从查询指针中读取出，并生成列表
+            self.initData = []              # 清空initData列表
+            for d in initCursor:
+                data = dataClass()
+                data.__dict__ = d
+                self.initData.append(data)      
+            
+            # 载入回测数据
+            if not self.dataEndDate:
+                flt = {'datetime':{'$gte':self.strategyStartDate}}   # 数据过滤条件
+            else:
+                flt = {'datetime':{'$gte':self.strategyStartDate,
+                                  '$lte':self.dataEndDate}}  
+            self.dbCursor = collection.find(flt).sort('datetime')
+            
+            self.output(u'载入完成，数据量：%s' %(initCursor.count() + self.dbCursor.count()))        
         
-        #for d in initCursor:
-            #data = dataClass()
-            #data.__dict__ = d
-            #self.initData.append(data)      
+        else:
+            
+            self.initData = []              # 清空initData列表
+            import csv
+            
+            """将BitcoinCharts导出的csv格式的历史tick数据读取"""
+            self.output(u'开始读取CSV文件')
+            if self.csvDataPath:
+                # 载入初始化需要用的数据
+                f = open(self.csvDataPath,'r')
+                reader = csv.reader(f)
+                
+                for d in reader:
+                    bar = VtBarData()
+                    bar.vtSymbol = '000001'
+                    bar.symbol = '000001'
+                    bar.open = float(d[1]) #float(d['Open'])
+                    bar.high = float(d[3]) #float(d['High'])
+                    bar.low = float(d[4]) #float(d['Low'])
+                    bar.close = float(d[2]) #float(d['Close'])
+                    bar.date = datetime.strptime(d[0], self.csvDateFormat).strftime('%Y%m%d')  #d['Date']
+                    bar.time = datetime.strptime(d[0], self.csvDateFormat).strftime('%H:%M:%S')#d['Time']
+                    bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
+                    bar.volume = float(d[5]) #d['TotalVolume']
         
-        # 载入回测数据
-        # if not self.dataEndDate:
-        #    flt = {'datetime':{'$gte':self.strategyStartDate}}   # 数据过滤条件
-        # else:
-        #     flt = {'datetime':{'$gte':self.strategyStartDate,
-        #                       '$lte':self.dataEndDate}}  
-        # self.dbCursor = collection.find(flt).sort('datetime')
-        
-        #self.output(u'载入完成，数据量：%s' %(initCursor.count() + self.dbCursor.count()))
+                    if bar.datetime.date() < self.dataStartDate.date() :
+                        continue
+                    if bar.datetime.date() >= self.strategyStartDate.date():
+                        break
+            
+                    data = dataClass()
+                    data.__dict__ = bar.__dict__
+                    self.initData.append(data)
+                    
+                f.close()
+                
+            else:
+                self.output(u'CSV路径未定义')
+
         
     #----------------------------------------------------------------------
     def runBacktesting(self):
@@ -279,45 +322,53 @@ class BacktestingEngine(object):
         self.output(u'策略启动完成')
         
         self.output(u'开始回放数据')
-
-        # for d in self.dbCursor:
-        import csv
-        f = open(r'C:\Users\ut2auj\Documents\Private\python\vnpy1\examples\CtaBacktesting\bitstampUSD.csv',"r")
-        reader = csv.reader(f)
-
-        # 载入回测数据
-        for d in reader:
-            bar = VtBarData()
-            bar.vtSymbol = 'rb0000'
-            bar.symbol = 'rb0000'
-            bar.open = float(d['Open'])
-            bar.high = float(d['High'])
-            bar.low = float(d['Low'])
-            bar.close = float(d['Close'])
-            bar.date = datetime.strptime(d['Date'], '%Y-%m-%d').strftime('%Y%m%d')
-            bar.time = d['Time']
-            bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
-            bar.volume = d['TotalVolume']
-
-            if not self.dataEndDate:
-                if bar.datetime.date() < self.strategyStartDate.date():
-                    continue
-            else:
-                if bar.datetime.date() < self.strategyStartDate.date():
-                    continue
-                if bar.datetime.date() > self.dataEndDate.date():
-                    break
-    
-            data = dataClass()
-            data.__dict__ = bar.__dict__
-            func(data)
-            
-        f.close()    
         
-        #for d in self.initData:
-            #data = dataClass()
-            #data.__dict__ = d.__dict__
-            #func(data)     
+        if self.dataSource == self.DB_MODE: 
+            
+            for d in self.dbCursor:
+                data = dataClass()
+                data.__dict__ = d.__dict__
+                func(data)
+                
+        else:
+            
+            if self.csvDataPath:
+                import csv
+                f = open(self.csvDataPath,"r")
+                reader = csv.reader(f)
+        
+                # 载入回测数据
+                for d in reader:
+                    bar = VtBarData()
+                    bar.vtSymbol = '000001'
+                    bar.symbol = '000001'
+                    bar.open = float(d[1])#float(d['Open'])
+                    bar.high = float(d[3])#float(d['High'])
+                    bar.low = float(d[4])#float(d['Low'])
+                    bar.close =float(d[2])#float(d['Close'])
+                    bar.date = datetime.strptime(d[0], self.csvDateFormat).strftime('%Y%m%d')
+                    bar.time = datetime.strptime(d[0], self.csvDateFormat).strftime('%H:%M:%S')#d['Time']
+                    bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
+                    bar.volume =float(d[5])#d['TotalVolume']
+        
+                    if not self.dataEndDate:
+                        if bar.datetime.date() < self.strategyStartDate.date():
+                            continue
+                    else:
+                        if bar.datetime.date() < self.strategyStartDate.date():
+                            continue
+                        if bar.datetime.date() > self.dataEndDate.date():
+                            break
+            
+                    data = dataClass()
+                    data.__dict__ = bar.__dict__
+                    func(data)
+                    
+                f.close() 
+                
+            else:
+                self.output(u'CSV路径未定义')            
+
             
         self.output(u'数据回放结束')
         
@@ -355,6 +406,7 @@ class BacktestingEngine(object):
         self.strategy.name = self.strategy.className
     
     #----------------------------------------------------------------------
+    
     def crossLimitOrder(self):
         """基于最新数据撮合限价单"""
         # 先确定会撮合成交的价格
@@ -991,7 +1043,8 @@ class BacktestingEngine(object):
                                                  targetName, self.mode, 
                                                  self.startDate, self.initDays, self.endDate,
                                                  self.slippage, self.rate, self.size, self.priceTick,
-                                                 self.dbName, self.symbol)))
+                                                 self.dbName, self.symbol, self.dataSource, 
+                                                 self.csvDataPath, self.csvDateFormat)))
         pool.close()
         pool.join()
         
@@ -1032,7 +1085,8 @@ class BacktestingEngine(object):
             resultList.append(testDates(strategyClass, strategySetting, targetName, self.mode, 
                                         self.startDate, self.initDays, self.endDate, diffDays,
                                         self.slippage, self.rate, self.size, self.priceTick,
-                                        self.dbName, self.symbol))   
+                                        self.dbName, self.symbol, self.dataSource, 
+                                        self.csvDataPath, self.csvDateFormat))   
             
         #pool.close()
         #pool.join()
@@ -1394,7 +1448,8 @@ def formatNumber(n):
 def optimize(strategyClass, setting, targetName,
              mode, startDate, initDays, endDate,
              slippage, rate, size, priceTick,
-             dbName, symbol):
+             dbName, symbol, dataSource,
+             csvDataPath, csvDateFormat):
     """多进程优化时跑在每个进程中运行的函数"""
     engine = BacktestingEngine()
     engine.setBacktestingMode(mode)
@@ -1405,6 +1460,9 @@ def optimize(strategyClass, setting, targetName,
     engine.setSize(size)
     engine.setPriceTick(priceTick)
     engine.setDatabase(dbName, symbol)
+    engine.setDataSource(dataSource)
+    engine.setCsvDataPath(csvDataPath)
+    engine.setCsvDateFormat(csvDateFormat)    
     
     engine.initStrategy(strategyClass, setting)
     engine.runBacktesting()
@@ -1421,7 +1479,8 @@ def optimize(strategyClass, setting, targetName,
 def testDates(strategyClass, setting, targetName,
              mode, startDate, initDays, endDate, diffDays,
              slippage, rate, size, priceTick,
-             dbName, symbol):
+             dbName, symbol, dataSource,
+             csvDataPath, csvDateFormat):
     """多进程优化时跑在每个进程中运行的函数"""
     engine = BacktestingEngine()
     engine.setBacktestingMode(mode)
@@ -1432,6 +1491,9 @@ def testDates(strategyClass, setting, targetName,
     engine.setSize(size)
     engine.setPriceTick(priceTick)
     engine.setDatabase(dbName, symbol)
+    engine.setDataSource(dataSource)
+    engine.setCsvDataPath(csvDataPath)
+    engine.setCsvDateFormat(csvDateFormat)      
     
     engine.initStrategy(strategyClass, setting)
     engine.runBacktesting()
@@ -1443,3 +1505,4 @@ def testDates(strategyClass, setting, targetName,
     except KeyError:
         targetValue = 0            
     return (diffDays, targetValue, df, d) 
+

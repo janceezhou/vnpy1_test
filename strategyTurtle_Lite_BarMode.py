@@ -19,18 +19,23 @@ class TurtleStrategy(CtaTemplate):
     author = u'用Python的交易员'
 
     # 策略参数
-    atrLength = 20          # 计算ATR指标的窗口数   
+    
+    S_length=5 #10
+    #M_length=20 #20
+    #L_length= 55 #55
+    
+    atrLength = S_length*2          # 计算ATR指标的窗口数   
     initDays = 80           # 初始化数据所用的天数
     maxUnit = 4             # 最多持有unit数
 
     # 策略变量
     atrValue = 0                        # 最新的ATR指标数值
-    historicHigh20 = 0                  # 20天历史最高价的数值
-    historicLow20 = 0                   # 20天历史最低价的数值
-    historicHigh10 = 0                  # 10天历史最高价的数值
-    historicLow10 = 0                   # 10天历史最低价的数值
-    historicHigh55 = 0                  # 20天历史最高价的数值
-    historicLow55 = 0                   # 20天历史最低价的数值
+    historicHigh_m = 0                  # 20天历史最高价的数值
+    historicLow_m = 0                   # 20天历史最低价的数值
+    historicHigh_s = 0                  # 10天历史最高价的数值
+    historicLow_s = 0                   # 10天历史最低价的数值
+    historicHigh_l = 0                  # 20天历史最高价的数值
+    historicLow_l = 0                   # 20天历史最低价的数值
     lastTradePrice = 0                  # 上一次成交价格的数值
     lastTradeAtrValue = 0               # 上一次成交时的ATR的数值
     unit = 0                            # 头寸的计量单位
@@ -46,6 +51,7 @@ class TurtleStrategy(CtaTemplate):
     orderList = []                      # 保存开仓的委托代码的列表
     stopPriceList = []                  # 保存与开仓的委托代码对应的止损价的列表
     
+    
     #testIndex = 0
 
     # 参数列表，保存了参数的名称
@@ -53,19 +59,21 @@ class TurtleStrategy(CtaTemplate):
                  'className',
                  'author',
                  'vtSymbol',
-                 'atrLength']    
+                 'atrLength',
+                 'S_length',
+                 'maxUnit']    
 
     # 变量列表，保存了变量的名称
     varList = ['inited',
                'trading',
                'pos',
                'atrValue',
-               'historicHigh20',
-               'historicLow20',
-               'historicHigh10',
-               'historicLow10',
-               'historicHigh55',
-               'historicLow55']  
+               'historicHigh_m',
+               'historicLow_m',
+               'historicHigh_s',
+               'historicLow_s',
+               'historicHigh_l',
+               'historicLow_l']  
     
     # 同步列表，保存了需要保存到数据库的变量名称
     syncList = ['pos']
@@ -75,11 +83,14 @@ class TurtleStrategy(CtaTemplate):
         """Constructor"""
         super(TurtleStrategy, self).__init__(ctaEngine, setting)
         
+        #self.M_length=2*self.S_length
+        #self.L_length=self.M_length*2+5
+        
         # 创建K线合成器对象
-        self.bg = BarGenerator(self.onBar) 
-        self.am = ArrayManager(20)
-        self.am10 = ArrayManager(10)
-        self.am55 = ArrayManager(55)
+        self.bg = BarGenerator(self.onBar, 0, None, 0, None, 1, self.onDayBar) 
+        self.am = ArrayManager(2*self.S_length)
+        self.am_s = ArrayManager(self.S_length)
+        self.am_l = ArrayManager(4*self.S_length+15)
         
         self.orderList = []
         
@@ -124,47 +135,34 @@ class TurtleStrategy(CtaTemplate):
     #----------------------------------------------------------------------
     def onBar(self, bar):
         """收到Bar推送（必须由用户继承实现）"""
+        self.bg.updateDayBar(bar)
+        
         # 撤销之前发出的尚未成交的委托（包括限价单和停止单）
         self.cancelAll()
         
         # 保存K线数据
         am = self.am
-        am10 = self.am10
-        am55 = self.am55
+        am_s = self.am_s
+        am_l = self.am_l
         
-        am.updateBar(bar)
-        am10.updateBar(bar)
-        am55.updateBar(bar)
-        
-        if not am.inited or not am10.inited or not am55.inited:
+        if not am.inited or not am_s.inited or not am_l.inited:
             return
         
-        # 计算指标数值
-        self.atrValue = am55.atr(self.atrLength)
-        self.historicHigh20 = am.high.max()
-        self.historicLow20 = am.low.min()
-        self.historicHigh10 = am10.high.max()
-        self.historicLow10 = am10.low.min()
-        self.historicHigh55 = am55.high.max()
-        self.historicLow55 = am55.low.min()
-        
-        #if bar.date == '20150412':
-            #print 'Yes'
-        self.unit = int(self.ctaEngine.capital * 0.01 / self.atrValue)  
-    
+        #print 'date: %s|close: %f|20dayHigh: %f|20dayLow: %f' % (bar.date, bar.close, self.historicHigh_m, self.historicLow_m)
+
         # 当前无仓位，发送开仓委托，或者计算上一次突破时的虚拟交易
         if self.pos == 0:
-            if bar.close > self.historicHigh20:
-                if (self.neverTrade or self.lastBreakLosing or (bar.close > self.historicHigh55)) and self.unit != 0:
-                    print "%s|Buy|LastPrice: %f|HistoricHigh20: %f|Unit: %d" % (bar.date, bar.close, self.historicHigh20, self.unit)
+            if bar.close > self.historicHigh_m:
+                if (self.neverTrade or self.lastBreakLosing or (bar.close > self.historicHigh_l)) and self.unit != 0:
+                    print "%s|Buy|LastPrice: %f|historicHigh_m: %f|Unit: %d" % (bar.date, bar.close, self.historicHigh_m, self.unit)
                     self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False))
                     self.lastTradePrice = bar.close
                     self.lastTradeAtrValue = self.atrValue
                     self.neverTrade = False
     
-            elif bar.close < self.historicLow20:
-                if (self.neverTrade or self.lastBreakLosing or (bar.close < self.historicLow55)) and self.unit != 0:
-                    print "%s|Short|LastPrice: %f|HistoricLow20: %f|Unit: %d" % (bar.date, bar.close, self.historicLow20, self.unit)                 
+            elif bar.close < self.historicLow_m:
+                if (self.neverTrade or self.lastBreakLosing or (bar.close < self.historicLow_l)) and self.unit != 0:
+                    print "%s|Short|LastPrice: %f|historicLow_m: %f|Unit: %d" % (bar.date, bar.close, self.historicLow_m, self.unit)                 
                     self.orderList.extend(self.short(self.minTradePrice, self.unit, False))
                     self.lastTradePrice = bar.close
                     self.lastTradeAtrValue = self.atrValue
@@ -172,11 +170,11 @@ class TurtleStrategy(CtaTemplate):
     
             # 虚拟交易         
             if not (self.lastBreakLongTrade or self.lastBreakShortTrade):
-                if bar.close > self.historicHigh20:
+                if bar.close > self.historicHigh_m:
                     self.lastBreakOutPrice = bar.close
                     self.lastBreakAtrValue = self.atrValue
                     self.lastBreakLongTrade = True
-                elif bar.close < self.historicLow20:
+                elif bar.close < self.historicLow_m:
                     self.lastBreakOutPrice = bar.close
                     self.lastBreakAtrValue = self.atrValue
                     self.lastBreakShortTrade = True
@@ -185,7 +183,7 @@ class TurtleStrategy(CtaTemplate):
                 if bar.close < self.lastBreakOutPrice - 2 * self.lastBreakAtrValue:                
                     self.lastBreakLongTrade = False
                     self.lastBreakLosing = True
-                elif bar.close > self.historicHigh10:
+                elif bar.close > self.historicHigh_s:
                     self.lastBreakLongTrade = False
                     self.lastBreakLosing = False
     
@@ -193,7 +191,7 @@ class TurtleStrategy(CtaTemplate):
                 if bar.close > self.lastBreakOutPrice + 2 * self.lastBreakAtrValue:                
                     self.lastBreakShortTrade = False
                     self.lastBreakLosing = True
-                elif bar.close < self.historicLow10:
+                elif bar.close < self.historicLow_s:
                     self.lastBreakShortTrade = False
                     self.lastBreakLosing = False
     
@@ -217,8 +215,8 @@ class TurtleStrategy(CtaTemplate):
 
     
             # exit
-            elif bar.close < self.historicLow10:
-                print "%s|Sell|LastPrice: %f|HistoricLow10: %f|Unit: %d" % (bar.date, bar.close, self.historicLow10, self.unit)             
+            elif bar.close < self.historicLow_s:
+                print "%s|Sell|LastPrice: %f|historicLow_s: %f|Unit: %d" % (bar.date, bar.close, self.historicLow_s, self.unit)             
                 self.sell(self.minTradePrice, abs(self.pos), False)
                 self.orderList = []
                 # 近似认为此比交易盈利
@@ -246,19 +244,51 @@ class TurtleStrategy(CtaTemplate):
                 
     
             # exit
-            elif bar.close > self.historicHigh10:
-                print "%s|Cover|LastPrice: %f|HistoricHigh10: %f|Unit: %d" % (bar.date, bar.close, self.historicHigh10, self.unit)                      
+            elif bar.close > self.historicHigh_s:
+                print "%s|Cover|LastPrice: %f|historicHigh_s: %f|Unit: %d" % (bar.date, bar.close, self.historicHigh_s, self.unit)                      
                 self.cover(self.maxTradePrice, abs(self.pos), False)
                 self.orderList = []
                 # 近似认为此比交易盈利
                 self.lastBreakLosing = False
-            
+                
     
         # 同步数据到数据库o
         self.saveSyncData()        
     
         # 发出状态更新事件
         self.putEvent()            
+    
+    #----------------------------------------------------------------------        
+    def onDayBar(self, bar):
+        """收到Bar推送（必须由用户继承实现）"""        
+        """收到Bar推送（必须由用户继承实现）"""        
+        
+        # 保存K线数据
+        am = self.am
+        am_s = self.am_s
+        am_l = self.am_l
+        
+        am.updateBar(bar)
+        am_s.updateBar(bar)
+        am_l.updateBar(bar)
+        
+        if not am.inited or not am_s.inited or not am_l.inited:
+            return
+        
+        # 计算指标数值
+        #self.atrValue = am_l.atr(self.atrLength)
+        self.atrValue = am_l.atr(self.S_length*2)
+        self.historicHigh_m = am.high.max()
+        self.historicLow_m = am.low.min()
+        self.historicHigh_s = am_s.high.max()
+        self.historicLow_s = am_s.low.min()
+        self.historicHigh_l = am_l.high.max()
+        self.historicLow_l = am_l.low.min()
+        
+        #if bar.date == '20150412':
+            #print 'Yes'
+        self.unit = int(self.ctaEngine.capital * 0.01 / self.atrValue)                  
+        
     #----------------------------------------------------------------------
     def onOrder(self, order):
         """收到委托变化推送（必须由用户继承实现）"""
