@@ -432,8 +432,6 @@ class BarGenerator(object):
             self.xminBar.low = bar.low            
             
             self.xminBar.datetime = bar.datetime    # 以第一根分钟K线的开始时间戳作为X分钟线的时间戳
-            
-            
         # 累加老K线
         else:
             self.xminBar.high = max(self.xminBar.high, bar.high)
@@ -456,6 +454,12 @@ class BarGenerator(object):
             
             # 清空老K线缓存对象
             self.xminBar = None
+
+    #----------------------------------------------------------------------
+    def generate(self):
+        """手动强制立即完成K线合成"""
+        self.onBar(self.bar)
+        self.bar = None
 
     #----------------------------------------------------------------------            
     def updateHourBar(self, bar):

@@ -25,8 +25,11 @@ class TurtleStrategy(CtaTemplate):
     #L_length= 55 #55
     
     atrLength = S_length*2          # 计算ATR指标的窗口数   
-    initDays = 80           # 初始化数据所用的天数
-    maxUnit = 4             # 最多持有unit数
+    initDays = 80                   # 初始化数据所用的天数
+    maxUnit = 4                     # 最多持有unit数
+    contractSize = 1                # 合约大小
+    priceLimitPct = ''                  # 涨跌停板限制 
+                          
 
     # 策略变量
     atrValue = 0                        # 最新的ATR指标数值
@@ -61,7 +64,9 @@ class TurtleStrategy(CtaTemplate):
                  'vtSymbol',
                  'atrLength',
                  'S_length',
-                 'maxUnit']    
+                 'maxUnit',
+                 'contractSize',
+                 'priceLimitPct']    
 
     # 变量列表，保存了变量的名称
     varList = ['inited',
@@ -154,7 +159,7 @@ class TurtleStrategy(CtaTemplate):
         if self.pos == 0:
             if bar.close > self.historicHigh_m:
                 if (self.neverTrade or self.lastBreakLosing or (bar.close > self.historicHigh_l)) and self.unit != 0:
-                    print "%s|Buy|LastPrice: %f|historicHigh_m: %f|Unit: %d" % (bar.date, bar.close, self.historicHigh_m, self.unit)
+                    print "%s|Buy|LastPrice: %f|historicHigh_m: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.historicHigh_m, self.unit, self.maxTradePrice, self.minTradePrice)
                     self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False))
                     self.lastTradePrice = bar.close
                     self.lastTradeAtrValue = self.atrValue
@@ -162,7 +167,7 @@ class TurtleStrategy(CtaTemplate):
     
             elif bar.close < self.historicLow_m:
                 if (self.neverTrade or self.lastBreakLosing or (bar.close < self.historicLow_l)) and self.unit != 0:
-                    print "%s|Short|LastPrice: %f|historicLow_m: %f|Unit: %d" % (bar.date, bar.close, self.historicLow_m, self.unit)                 
+                    print "%s|Short|LastPrice: %f|historicLow_m: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.historicLow_m, self.unit, self.maxTradePrice, self.minTradePrice)                 
                     self.orderList.extend(self.short(self.minTradePrice, self.unit, False))
                     self.lastTradePrice = bar.close
                     self.lastTradeAtrValue = self.atrValue
@@ -203,12 +208,12 @@ class TurtleStrategy(CtaTemplate):
             self.longStop = self.lastTradePrice - (2 - (len(self.orderList) - 1) / 2) * self.lastTradeAtrValue
             # add long position
             if addUnit and underMaxUnit and self.unit != 0:
-                print "%s|Buy|LastPrice: %f|BreakPrice: %f|Unit: %d" % (bar.date, bar.close, self.lastTradePrice + len(self.orderList) * self.lastTradeAtrValue / 2, self.unit)             
+                print "%s|Buy|LastPrice: %f|BreakPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.lastTradePrice + len(self.orderList) * self.lastTradeAtrValue / 2, self.unit, self.maxTradePrice, self.minTradePrice)             
                 self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False))
                  
             # stop
             elif bar.close < self.longStop:
-                print "%s|Sell|LastPrice: %f|StopPrice: %f|Unit: %d" % (bar.date, bar.close, self.longStop, self.unit)                  
+                print "%s|Sell|LastPrice: %f|StopPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.longStop, self.unit, self.maxTradePrice, self.minTradePrice)                  
                 self.sell(self.minTradePrice, abs(self.pos), False)
                 self.orderList = []
                 self.lastBreakLosing = True
@@ -216,7 +221,7 @@ class TurtleStrategy(CtaTemplate):
     
             # exit
             elif bar.close < self.historicLow_s:
-                print "%s|Sell|LastPrice: %f|historicLow_s: %f|Unit: %d" % (bar.date, bar.close, self.historicLow_s, self.unit)             
+                print "%s|Sell|LastPrice: %f|historicLow_s: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.historicLow_s, self.unit, self.maxTradePrice, self.minTradePrice)             
                 self.sell(self.minTradePrice, abs(self.pos), False)
                 self.orderList = []
                 # 近似认为此比交易盈利
@@ -232,12 +237,12 @@ class TurtleStrategy(CtaTemplate):
             
             # add short position
             if addUnit and underMaxUnit and self.unit != 0:
-                print "%s|Short|LastPrice: %f|BreakPrice: %f|Unit: %d" % (bar.date, bar.close, self.lastTradePrice - len(self.orderList) * self.lastTradeAtrValue / 2, self.unit)              
+                print "%s|Short|LastPrice: %f|BreakPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.lastTradePrice - len(self.orderList) * self.lastTradeAtrValue / 2, self.unit, self.maxTradePrice, self.minTradePrice)              
                 self.orderList.extend(self.short(self.minTradePrice, self.unit, False))
 
             # stop
             elif bar.close > self.shortStop:
-                print "%s|Cover|LastPrice: %f|StopPrice: %f|Unit: %d" % (bar.date, bar.close, self.shortStop, self.unit)                  
+                print "%s|Cover|LastPrice: %f|StopPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.shortStop, self.unit, self.maxTradePrice, self.minTradePrice)                  
                 self.cover(self.maxTradePrice, abs(self.pos), False)
                 self.orderList = []
                 self.lastBreakLosing = True
@@ -245,7 +250,7 @@ class TurtleStrategy(CtaTemplate):
     
             # exit
             elif bar.close > self.historicHigh_s:
-                print "%s|Cover|LastPrice: %f|historicHigh_s: %f|Unit: %d" % (bar.date, bar.close, self.historicHigh_s, self.unit)                      
+                print "%s|Cover|LastPrice: %f|historicHigh_s: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.historicHigh_s, self.unit, self.maxTradePrice, self.minTradePrice)                      
                 self.cover(self.maxTradePrice, abs(self.pos), False)
                 self.orderList = []
                 # 近似认为此比交易盈利
@@ -287,7 +292,11 @@ class TurtleStrategy(CtaTemplate):
         
         #if bar.date == '20150412':
             #print 'Yes'
-        self.unit = int(self.ctaEngine.capital * 0.01 / self.atrValue)                  
+        self.unit = int(self.ctaEngine.capital * 0.01 / self.atrValue / self.contractSize)
+        
+        if self.priceLimitPct:
+            self.maxTradePrice = bar.close * (1 + self.priceLimitPct)
+            self.minTradePrice = bar.close * (1 - self.priceLimitPct)
         
     #----------------------------------------------------------------------
     def onOrder(self, order):
