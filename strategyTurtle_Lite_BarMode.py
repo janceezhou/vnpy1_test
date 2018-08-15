@@ -27,6 +27,7 @@ class TurtleStrategy(CtaTemplate):
     atrLength = S_length*2          # 计算ATR指标的窗口数   
     initDays = 80                   # 初始化数据所用的天数
     maxUnit = 4                     # 最多持有unit数
+    risklevel = 0.01                # 风险因子
     contractSize = 1                # 合约大小
     priceLimitPct = ''                  # 涨跌停板限制 
                           
@@ -65,6 +66,7 @@ class TurtleStrategy(CtaTemplate):
                  'atrLength',
                  'S_length',
                  'maxUnit',
+				 'risklevel',
                  'contractSize',
                  'priceLimitPct']    
 
@@ -292,7 +294,7 @@ class TurtleStrategy(CtaTemplate):
         
         #if bar.date == '20150412':
             #print 'Yes'
-        self.unit = int(self.ctaEngine.capital * 0.01 / self.atrValue / self.contractSize)
+        self.unit = int(self.ctaEngine.capital * self.risklevel / self.atrValue / self.contractSize)
         
         if self.priceLimitPct:
             self.maxTradePrice = bar.close * (1 + self.priceLimitPct)
