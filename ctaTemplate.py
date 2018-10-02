@@ -537,7 +537,11 @@ class BarGenerator(object):
         if newDay == True:
             self.xdayBar.vtSymbol = bar.vtSymbol
             self.xdayBar.symbol = bar.symbol
-            self.xdayBar.exchange = bar.exchange
+            
+            try:
+                self.xdayBar.exchange = bar.exchange
+            except:
+                pass
         
             self.xdayBar.open = bar.open
             self.xdayBar.high = bar.high
@@ -551,8 +555,13 @@ class BarGenerator(object):
             self.xdayBar.low = min(self.xdayBar.low, bar.low)
     
         # 通用部分
-        self.xdayBar.close = bar.close        
-        self.xdayBar.openInterest = bar.openInterest
+        self.xdayBar.close = bar.close
+        
+        try:
+            self.xdayBar.openInterest = bar.openInterest
+        except:
+            pass
+        
         self.xdayBar.volume += int(bar.volume)     
         
 ########################################################################

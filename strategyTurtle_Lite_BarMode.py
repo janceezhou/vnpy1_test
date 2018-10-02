@@ -25,11 +25,12 @@ class TurtleStrategy(CtaTemplate):
     #L_length= 55 #55
     
     atrLength = S_length*2          # 计算ATR指标的窗口数   
-    initDays = 80                   # 初始化数据所用的天数
+    initDays = 55                   # 初始化数据所用的天数
     maxUnit = 4                     # 最多持有unit数
     risklevel = 0.01                # 风险因子
     contractSize = 1                # 合约大小
-    priceLimitPct = ''                  # 涨跌停板限制 
+    priceLimitPct = ''                  # 涨跌停板限制
+    capital = 6
                           
 
     # 策略变量
@@ -66,7 +67,7 @@ class TurtleStrategy(CtaTemplate):
                  'atrLength',
                  'S_length',
                  'maxUnit',
-				 'risklevel',
+                 'risklevel',
                  'contractSize',
                  'priceLimitPct']    
 
@@ -114,6 +115,10 @@ class TurtleStrategy(CtaTemplate):
         # 载入历史数据，并采用回放计算的方式初始化策略数值
         initData = self.loadBar(self.initDays)
         for bar in initData:
+            bar.open = 1 / float(bar.open)
+            bar.high = 1 / float(bar.high)
+            bar.low = 1 / float(bar.low)
+            bar.close = 1 / float(bar.close)               
             self.onBar(bar)
     
         #initData = self.loadTick(self.initDays)
@@ -137,7 +142,8 @@ class TurtleStrategy(CtaTemplate):
     #----------------------------------------------------------------------
     def onTick(self, tick):
         """收到行情TICK推送（必须由用户继承实现）"""
-        self.bg.updateTick(tick)           
+        tick.lastPrice = 1 / float(tick.lastPrice)
+        self.bg.updateTick(tick)
 
     #----------------------------------------------------------------------
     def onBar(self, bar):
@@ -158,11 +164,13 @@ class TurtleStrategy(CtaTemplate):
         #print 'date: %s|close: %f|20dayHigh: %f|20dayLow: %f' % (bar.date, bar.close, self.historicHigh_m, self.historicLow_m)
 
         # 当前无仓位，发送开仓委托，或者计算上一次突破时的虚拟交易
+
         if self.pos == 0:
             if bar.close > self.historicHigh_m:
                 if (self.neverTrade or self.lastBreakLosing or (bar.close > self.historicHigh_l)) and self.unit != 0:
                     print "%s|Buy|LastPrice: %f|historicHigh_m: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.historicHigh_m, self.unit, self.maxTradePrice, self.minTradePrice)
-                    self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False))
+                    #self.orderList.extend(self.buy(self.maxTradePrice, int(self.unit * bar.close), False)) 'DZ:20180908
+                    self.orderList.extend(self.buy(self.maxTradePrice, int(self.unit * bar.close), False))
                     self.lastTradePrice = bar.close
                     self.lastTradeAtrValue = self.atrValue
                     self.neverTrade = False
@@ -170,7 +178,8 @@ class TurtleStrategy(CtaTemplate):
             elif bar.close < self.historicLow_m:
                 if (self.neverTrade or self.lastBreakLosing or (bar.close < self.historicLow_l)) and self.unit != 0:
                     print "%s|Short|LastPrice: %f|historicLow_m: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.historicLow_m, self.unit, self.maxTradePrice, self.minTradePrice)                 
-                    self.orderList.extend(self.short(self.minTradePrice, self.unit, False))
+                    #self.orderList.extend(self.short(self.minTradePrice, int(self.unit * bar.close), False))'DZ:20180908
+                    self.orderList.extend(self.short(self.minTradePrice, self.unit * bar.close, False))
                     self.lastTradePrice = bar.close
                     self.lastTradeAtrValue = self.atrValue
                     self.neverTrade = False
@@ -211,8 +220,9 @@ class TurtleStrategy(CtaTemplate):
             # add long position
             if addUnit and underMaxUnit and self.unit != 0:
                 print "%s|Buy|LastPrice: %f|BreakPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.lastTradePrice + len(self.orderList) * self.lastTradeAtrValue / 2, self.unit, self.maxTradePrice, self.minTradePrice)             
-                self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False))
-                 
+                #self.orderList.extend(self.buy(self.maxTradePrice, int(self.unit * bar.close), False))'DZ:20180908
+                self.orderList.extend(self.buy(self.maxTradePrice, self.unit * bar.close, False))
+                
             # stop
             elif bar.close < self.longStop:
                 print "%s|Sell|LastPrice: %f|StopPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.longStop, self.unit, self.maxTradePrice, self.minTradePrice)                  
@@ -240,8 +250,9 @@ class TurtleStrategy(CtaTemplate):
             # add short position
             if addUnit and underMaxUnit and self.unit != 0:
                 print "%s|Short|LastPrice: %f|BreakPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.lastTradePrice - len(self.orderList) * self.lastTradeAtrValue / 2, self.unit, self.maxTradePrice, self.minTradePrice)              
-                self.orderList.extend(self.short(self.minTradePrice, self.unit, False))
-
+                #self.orderList.extend(self.short(self.minTradePrice, int(self.unit * bar.close), False))'DZ:20180908
+                self.orderList.extend(self.short(self.minTradePrice, self.unit * bar.close, False))
+                
             # stop
             elif bar.close > self.shortStop:
                 print "%s|Cover|LastPrice: %f|StopPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.shortStop, self.unit, self.maxTradePrice, self.minTradePrice)                  
@@ -294,7 +305,10 @@ class TurtleStrategy(CtaTemplate):
         
         #if bar.date == '20150412':
             #print 'Yes'
-        self.unit = int(self.ctaEngine.capital * self.risklevel / self.atrValue / self.contractSize)
+            
+        # 只有回测模式下ctaBacktesting里才有capital变量
+        # self.unit = int(self.ctaEngine.capital * self.risklevel / self.atrValue / self.contractSize)
+        self.unit = int(self.capital * self.risklevel / self.atrValue / self.contractSize) 
         
         if self.priceLimitPct:
             self.maxTradePrice = bar.close * (1 + self.priceLimitPct)
