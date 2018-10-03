@@ -20,7 +20,7 @@ class TurtleStrategy(CtaTemplate):
 
     # 策略参数
     
-    S_length=5 #10
+    S_length=10 #10
     #M_length=20 #20
     #L_length= 55 #55
     
@@ -30,7 +30,7 @@ class TurtleStrategy(CtaTemplate):
     risklevel = 0.01                # 风险因子
     contractSize = 1                # 合约大小
     priceLimitPct = ''                  # 涨跌停板限制
-    capital = 6
+    capital = 1
                           
 
     # 策略变量
@@ -114,11 +114,7 @@ class TurtleStrategy(CtaTemplate):
 
         # 载入历史数据，并采用回放计算的方式初始化策略数值
         initData = self.loadBar(self.initDays)
-        for bar in initData:
-            bar.open = 1 / float(bar.open)
-            bar.high = 1 / float(bar.high)
-            bar.low = 1 / float(bar.low)
-            bar.close = 1 / float(bar.close)               
+        for bar in initData:             
             self.onBar(bar)
     
         #initData = self.loadTick(self.initDays)
@@ -142,12 +138,22 @@ class TurtleStrategy(CtaTemplate):
     #----------------------------------------------------------------------
     def onTick(self, tick):
         """收到行情TICK推送（必须由用户继承实现）"""
-        tick.lastPrice = 1 / float(tick.lastPrice)
+        # tick.lastPrice = 1 / float(tick.lastPrice)
         self.bg.updateTick(tick)
 
     #----------------------------------------------------------------------
     def onBar(self, bar):
         """收到Bar推送（必须由用户继承实现）"""
+        try:
+            self.insertBar(bar)
+        except:
+            pass
+        
+        bar.open = 1 / float(bar.open)
+        bar.high = 1 / float(bar.high)
+        bar.low = 1 / float(bar.low)
+        bar.close = 1 / float(bar.close)          
+        
         self.bg.updateDayBar(bar)
         
         # 撤销之前发出的尚未成交的委托（包括限价单和停止单）
@@ -169,8 +175,7 @@ class TurtleStrategy(CtaTemplate):
             if bar.close > self.historicHigh_m:
                 if (self.neverTrade or self.lastBreakLosing or (bar.close > self.historicHigh_l)) and self.unit != 0:
                     print "%s|Buy|LastPrice: %f|historicHigh_m: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.historicHigh_m, self.unit, self.maxTradePrice, self.minTradePrice)
-                    #self.orderList.extend(self.buy(self.maxTradePrice, int(self.unit * bar.close), False)) 'DZ:20180908
-                    self.orderList.extend(self.buy(self.maxTradePrice, int(self.unit * bar.close), False))
+                    self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False))
                     self.lastTradePrice = bar.close
                     self.lastTradeAtrValue = self.atrValue
                     self.neverTrade = False
@@ -178,8 +183,7 @@ class TurtleStrategy(CtaTemplate):
             elif bar.close < self.historicLow_m:
                 if (self.neverTrade or self.lastBreakLosing or (bar.close < self.historicLow_l)) and self.unit != 0:
                     print "%s|Short|LastPrice: %f|historicLow_m: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.historicLow_m, self.unit, self.maxTradePrice, self.minTradePrice)                 
-                    #self.orderList.extend(self.short(self.minTradePrice, int(self.unit * bar.close), False))'DZ:20180908
-                    self.orderList.extend(self.short(self.minTradePrice, self.unit * bar.close, False))
+                    self.orderList.extend(self.short(self.minTradePrice, self.unit, False))
                     self.lastTradePrice = bar.close
                     self.lastTradeAtrValue = self.atrValue
                     self.neverTrade = False
@@ -220,8 +224,7 @@ class TurtleStrategy(CtaTemplate):
             # add long position
             if addUnit and underMaxUnit and self.unit != 0:
                 print "%s|Buy|LastPrice: %f|BreakPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.lastTradePrice + len(self.orderList) * self.lastTradeAtrValue / 2, self.unit, self.maxTradePrice, self.minTradePrice)             
-                #self.orderList.extend(self.buy(self.maxTradePrice, int(self.unit * bar.close), False))'DZ:20180908
-                self.orderList.extend(self.buy(self.maxTradePrice, self.unit * bar.close, False))
+                self.orderList.extend(self.buy(self.maxTradePrice, self.unit, False))
                 
             # stop
             elif bar.close < self.longStop:
@@ -250,8 +253,7 @@ class TurtleStrategy(CtaTemplate):
             # add short position
             if addUnit and underMaxUnit and self.unit != 0:
                 print "%s|Short|LastPrice: %f|BreakPrice: %f|Unit: %d|PriceUpperLimit: %f|PriceLowerLimit: %f" % (bar.date, bar.close, self.lastTradePrice - len(self.orderList) * self.lastTradeAtrValue / 2, self.unit, self.maxTradePrice, self.minTradePrice)              
-                #self.orderList.extend(self.short(self.minTradePrice, int(self.unit * bar.close), False))'DZ:20180908
-                self.orderList.extend(self.short(self.minTradePrice, self.unit * bar.close, False))
+                self.orderList.extend(self.short(self.minTradePrice, self.unit, False))
                 
             # stop
             elif bar.close > self.shortStop:
@@ -307,8 +309,8 @@ class TurtleStrategy(CtaTemplate):
             #print 'Yes'
             
         # 只有回测模式下ctaBacktesting里才有capital变量
-        # self.unit = int(self.ctaEngine.capital * self.risklevel / self.atrValue / self.contractSize)
-        self.unit = int(self.capital * self.risklevel / self.atrValue / self.contractSize) 
+        self.unit = int(self.ctaEngine.capital * self.risklevel / self.atrValue / self.contractSize)
+        #self.unit = int(self.capital * self.risklevel / self.atrValue / self.contractSize) 
         
         if self.priceLimitPct:
             self.maxTradePrice = bar.close * (1 + self.priceLimitPct)

@@ -297,7 +297,8 @@ class BacktestingEngine(object):
             if self.csvDataPath:
                 # 载入初始化需要用的数据
                 f = open(self.csvDataPath,'r')
-                reader = csv.reader(f)
+                # reader = csv.reader(f)
+		reader = csv.DictReader(f)
                 
                 for d in reader:
 		    if self.mode == self.BAR_MODE:
@@ -313,16 +314,16 @@ class BacktestingEngine(object):
 			#bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
 			#bar.volume = float(d[5]) #d['TotalVolume']
 			bar = VtBarData()
-			bar.vtSymbol = '000001'
-			bar.symbol = '000001'
-			bar.open = float(d[1]) #float(d['Open'])
-			bar.high = float(d[3]) #float(d['High'])
-			bar.low = float(d[4]) #float(d['Low'])
-			bar.close = float(d[2]) #float(d['Close'])
-			bar.date = datetime.strptime(d[0], self.csvDateFormat).strftime('%Y%m%d')  #d['Date']
-			bar.time = datetime.strptime(d[0], self.csvDateFormat).strftime('%H:%M:%S')#d['Time']
+			bar.vtSymbol = 'XBTUSD.BITMEX'
+			bar.symbol = 'XBTUSD.BITMEX'
+			bar.open = float(d['open'])
+			bar.high = float(d['high'])
+			bar.low = float(d['low'])
+			bar.close = float(d['close'])
+			bar.date = datetime.strptime(d['date'], '%Y%m%d').strftime('%Y%m%d')  #d['Date']
+			bar.time = datetime.strptime(d['time'], '%H:%M:%S').strftime('%H:%M:%S')#d['Time']
 			bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
-			bar.volume = float(d[5]) #d['TotalVolume']
+			bar.volume = 0 #d['TotalVolume']
 	    
 			if bar.datetime.date() < self.dataStartDate.date() :
 			    continue
@@ -345,9 +346,7 @@ class BacktestingEngine(object):
 			    break
 			tick.date = tick.datetime.date().strftime('%Y%m%d')
 			tick.time = tick.datetime.time().strftime('%H:%M:%S')
-		    
-			# convert BTCUSD to USDBTC
-			tick.lastPrice = 1 / float(d[1])
+			tick.lastPrice = float(d[1])
 			tick.lastVolume = float(d[2])
 		    
 			data = dataClass()
@@ -398,7 +397,8 @@ class BacktestingEngine(object):
             if self.csvDataPath:
                 import csv
                 f = open(self.csvDataPath,"r")
-                reader = csv.reader(f)
+		# reader = csv.reader(f)
+		reader = csv.DictReader(f)
         
                 # 载入回测数据
                 for d in reader:
@@ -415,16 +415,16 @@ class BacktestingEngine(object):
 			#bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
 			#bar.volume =float(d[5])#d['TotalVolume']
 			bar = VtBarData()
-			bar.vtSymbol = '000001'
-			bar.symbol = '000001'
-			bar.open = float(d[1])#float(d['Open'])
-			bar.high = float(d[3])#float(d['High'])
-			bar.low = float(d[4])#float(d['Low'])
-			bar.close =float(d[2])#float(d['Close'])
-			bar.date = datetime.strptime(d[0], self.csvDateFormat).strftime('%Y%m%d')
-			bar.time = datetime.strptime(d[0], self.csvDateFormat).strftime('%H:%M:%S')#d['Time']
+			bar.vtSymbol = 'XBTUSD.BITMEX'
+			bar.symbol = 'XBTUSD.BITMEX'
+			bar.open = float(d['open'])
+			bar.high = float(d['high'])
+			bar.low = float(d['low'])
+			bar.close = float(d['close'])
+			bar.date = datetime.strptime(d['date'], '%Y%m%d').strftime('%Y%m%d')  #d['Date']
+			bar.time = datetime.strptime(d['time'], '%H:%M:%S').strftime('%H:%M:%S')#d['Time']
 			bar.datetime = datetime.strptime(bar.date + ' ' + bar.time, '%Y%m%d %H:%M:%S')
-			bar.volume =float(d[5])#d['TotalVolume']
+			bar.volume = 0 #d['TotalVolume']
 	    
 			if not self.dataEndDate:
 			    if bar.datetime.date() < self.strategyStartDate.date():
@@ -456,8 +456,7 @@ class BacktestingEngine(object):
 			tick.date = tick.datetime.date().strftime('%Y%m%d')
 			tick.time = tick.datetime.time().strftime('%H:%M:%S')
 		    
-			# convert BTCUSD to USDBTC
-			tick.lastPrice = 1 / float(d[1])
+			tick.lastPrice = float(d[1])
 			tick.lastVolume = float(d[2])
 		    
 			data = dataClass()
@@ -829,6 +828,9 @@ class BacktestingEngine(object):
             # 复制成交对象，因为下面的开平仓交易配对涉及到对成交数量的修改
             # 若不进行复制直接操作，则计算完后所有成交的数量会变成0
             trade = copy.copy(trade)
+	    
+	    # 为了计算BTC/USD计价
+	    trade.price = 1 / float(trade.price)	    
             
             # 多头交易
             if trade.direction == DIRECTION_LONG:
@@ -883,7 +885,7 @@ class BacktestingEngine(object):
                 else:                    
                     while True:
                         entryTrade = longTrade[0]
-                        exitTrade = trade
+                        exitTrade = trade		
                         
                         # 清算开平仓交易
                         closedVolume = min(exitTrade.volume, entryTrade.volume)
@@ -1234,6 +1236,10 @@ class BacktestingEngine(object):
         for trade in self.tradeDict.values():
             date = trade.dt.date()
             dailyResult = self.dailyResultDict[date]
+	    
+	    # 为了计算BTC/USD计价
+	    trade.price = 1 / float(trade.price)
+	    
             dailyResult.addTrade(trade)
             
         # 遍历计算每日结果
